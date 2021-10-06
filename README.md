@@ -1,4 +1,4 @@
-#Gradient Step Denoiser for convergent Plug-and-Play
+# Gradient Step Denoiser for convergent Plug-and-Play
 
 ### Introductory commands
 
