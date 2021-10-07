@@ -42,7 +42,7 @@ python denoise.py --dataset_name CBSD68 --noise_level_img 25
 ### Deblurring
 
 - If not already done, download pretrained checkpoint from https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing and save it as ```GS_denoising/ckpts/GSDRUNET.ckpt```
-- For deblurring the CBSD10 images at input Gaussian noise level 7.65, sequentially blurred with the 10 different kernels exposed in the paper:
+- For deblurring the CBSD10 images at input Gaussian noise level ```7.65```, sequentially blurred with the 10 different kernels exposed in the paper:
 ```
 cd PnP_restoration
 python deblur.py --dataset_name CBSD10 --noise_level_img 7.65 
@@ -54,17 +54,17 @@ Add the argument ```--extract_images``` the save the output images (slower) and 
 
 ### Super-resolution
 
-For performing super-resolution of CBSD10 images, downscaled with scale ```sf```, Gaussian noise level 7.65, and  sequentially blurred with the 8 different kernels exposed in the paper:
+For performing super-resolution of CBSD10 images, downscaled with scale ```sf```, Gaussian noise level ```7.65```, and  sequentially blurred with the 8 different kernels exposed in the paper:
 ```
 cd PnP_restoration
 python SR.py --dataset_name CBSD10 --noise_level_img 7.65 --sf 2
 ```
 
 ### Inpainting
-
+Inpainting on set3C images, with randomly masked pixels (with probability ```prop_mask = 0.5```) sequentially blurred with the 10 different kernels exposed in the paper:
 ```
 cd PnP_restoration
-python inpaint.py --dataset_name set3c
+python inpaint.py --dataset_name set3c --prop_mask 0.5
 ```
 
 ## Acknowledgments
