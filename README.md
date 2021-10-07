@@ -33,7 +33,7 @@ Checkpoints, tensorboard events and hyperparameters will be saved in the ```GS_d
 
 ### Testing 
 
-- Download pretrained checkpoint from https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing and save it as ```GS_denoising/ckpts/GSDRUNET.ckpt```
+- Download pretrained checkpoint from https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
 - For denoising the whole CBSD68 dataset at input Gaussian noise level 25 :
 ```
 cd PnP_restoration
