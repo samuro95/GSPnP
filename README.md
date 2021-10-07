@@ -17,7 +17,6 @@ pip install -r requirements.txt
 ## Gradient Step Denoiser (GS-DRUNet)
 
 The code relative to the Gradient Step Denoiser can be found in the ```GS_denoising``` directory.
-For simply testing the algorithm, the GS-DRUNet pretrained weights can be found in ```GS_denoising/ckpts/GSDRUNet.ckpt```
 
 ### Training 
 
