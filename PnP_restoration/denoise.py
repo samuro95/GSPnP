@@ -73,12 +73,12 @@ def denoise():
         psnri = psnr(denoise_img, input_im)
 
         psnr_list.append(psnri)
-        save_im_path = os.path.join(exp_out_path, 'images')
-        if not os.path.exists(save_im_path):
-            os.mkdir(save_im_path)
 
         if hparams.extract_images:
             # Save images
+            save_im_path = os.path.join(exp_out_path, 'images')
+            if not os.path.exists(save_im_path):
+                os.mkdir(save_im_path)
             imsave(os.path.join(save_im_path, 'img_' + str(i) + '_input.png'), input_im_uint)
             imsave(os.path.join(save_im_path, 'img_' + str(i) + '_noise.png'), single2uint(noise_im))
             imsave(os.path.join(save_im_path, 'img_' + str(i) + '_denoise.png'), single2uint(denoise_img))
