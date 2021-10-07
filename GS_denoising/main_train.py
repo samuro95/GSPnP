@@ -28,8 +28,9 @@ if __name__ == '__main__':
 
     random.seed(0)
 
+    if not os.path.exists(hparams.log_folder):
+        os.mkdir(hparams.log_folder)
     log_path = hparams.log_folder + '/' + hparams.name
-
     if not os.path.exists(log_path):
         os.mkdir(log_path)
     tb_logger = pl_loggers.TensorBoardLogger(log_path)
