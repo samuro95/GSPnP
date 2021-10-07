@@ -9,6 +9,8 @@ Copyright (c) 2020 Kai Zhang (cskaizhang@gmail.com)
 '''
 
 
+
+
 def imread_uint(path, n_channels=3):
     #  input: path
     # output: HxWx3(RGB or GGG), or HxWx1 (G)
@@ -32,6 +34,21 @@ def randomCrop(img1,img2,width,height):
     img1 = img1[y:y+height, x:x+width]
     img2 = img2[y:y + height, x:x + width]
     return img1,img2
+
+def modcrop(img_in, scale):
+    # img_in: Numpy, HWC or HW
+    img = np.copy(img_in)
+    if img.ndim == 2:
+        H, W = img.shape
+        H_r, W_r = H % scale, W % scale
+        img = img[:H - H_r, :W - W_r]
+    elif img.ndim == 3:
+        H, W, C = img.shape
+        H_r, W_r = H % scale, W % scale
+        img = img[:int(H-H_r), :int(W-W_r), :]
+    else:
+        raise ValueError('Wrong img ndim: [{:d}].'.format(img.ndim))
+    return img
 
 def crop_center(img,cropx,cropy):
     y,x = img.shape[0],img.shape[1]
