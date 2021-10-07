@@ -1,6 +1,11 @@
 # Gradient Step Denoiser for convergent Plug-and-Play
 
-### Introductory commands
+Samuel Hurault, [Arthur Leclaire](https://www.math.u-bordeaux.fr/~aleclaire/), [Nicolas Papadakis](https://www.math.u-bordeaux.fr/~npapadak/). \
+[Institut de Mathématiques de Bordeaux](https://www.math.u-bordeaux.fr/imb/spip.php), Bordeaux, France.
+
+
+## Prerequisites
+
 
 The code was computed with Python 3.8.10, PyTorch Lightning 1.2.6, PyTorch 1.7.1
 
@@ -60,4 +65,10 @@ python SR.py --dataset_name CBSD10 --noise_level_img 7.65 --sf 2
 cd PnP_restoration
 python inpaint.py --dataset_name set3c
 ```
+
+## Acknowledgments
+
+This repo contains parts of code taken from : 
+- Deep Plug-and-Play Image Restoration (DPIR) : https://github.com/cszn/DPIR 
+
 
