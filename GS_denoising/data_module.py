@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision import transforms
 from argparse import ArgumentParser

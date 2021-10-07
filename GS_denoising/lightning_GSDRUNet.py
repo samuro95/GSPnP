@@ -17,7 +17,9 @@ from models.network_unet import UNetRes
 
 
 class StudentGrad(pl.LightningModule):
-
+    '''
+    Standard DRUNet model
+    '''
     def __init__(self, model_name, pretrained, pretrained_checkpoint, act_mode, DRUNET_nb):
         super().__init__()
         self.model_name = model_name
@@ -34,12 +36,14 @@ class StudentGrad(pl.LightningModule):
     def forward(self, x, sigma):
         noise_level_map = torch.FloatTensor(x.size(0), 1, x.size(2), x.size(3)).fill_(sigma).to(self.device)
         x = torch.cat((x, noise_level_map), 1)
-        # n = test_mode(self.model, x, mode=2, refield=32, min_size=256, modulo=16)
         n = self.model(x)
         return n
 
 
 class GradMatch(pl.LightningModule):
+    '''
+    Gradient Step Denoiser
+    '''
 
     def __init__(self, hparams):
         super().__init__()
@@ -54,45 +58,55 @@ class GradMatch(pl.LightningModule):
 
 
     def calculate_grad(self, x, sigma):
+        '''
+        Calculate Dg(x) the gradient of the regularizer g at input x
+        :param x: torch.tensor Input image
+        :param sigma: Denoiser level (std)
+        :return: Dg(x), DRUNet output N(x)
+        '''
         x = x.float()
         x = x.requires_grad_()
 
         if x.size(2) % 8 == 0 and x.size(3) % 8 == 0:
-            f = self.student_grad.forward(x, sigma)
+            N = self.student_grad.forward(x, sigma)
         else:
             current_model = lambda v: self.student_grad.forward(v, sigma)
-            f = test_mode(current_model, x, mode=5, refield=64, min_size=256)
-        if self.hparams.use_post_forward_clip:
-            torch.clip(f, 0, 1)
-        Jf = torch.autograd.grad(f, x, grad_outputs=x - f, create_graph=True, only_inputs=True)[0]
-        return x - f - Jf, f
+            N = test_mode(current_model, x, mode=5, refield=64, min_size=256)
+        JN = torch.autograd.grad(N, x, grad_outputs=x - N, create_graph=True, only_inputs=True)[0]
+        Dg = x - N - JN
+        return Dg, N
 
 
     def forward(self, x, sigma):
-        if self.hparams.grad_matching:
-            Ds, f = self.calculate_grad(x, sigma)
-            if self.hparams.sigma_step:
-                x_hat = x - self.hparams.weight_Ds * sigma * Ds
-            else:
-                x_hat = x - self.hparams.weight_Ds * Ds
-            return x_hat, Ds
-        else:
+        '''
+        Denoising with Gradient Step Denoiser
+        :param x:  torch.tensor input image
+        :param sigma: Denoiser level (std)
+        :return: Denoised image x_hat, Dg(x) gradient of the regularizer g at x
+        '''
+        if self.hparams.grad_matching: # If gradient step denoising
+            Dg, f = self.calculate_grad(x, sigma)
+            if self.hparams.sigma_step: # possibility to multiply Dg by sigma
+                x_hat = x - self.hparams.weight_Ds * sigma * Dg
+            else: # as realized in the paper (with weight_Ds=1)
+                x_hat = x - self.hparams.weight_Ds * Dg
+            return x_hat, Dg
+        else: # If denoising with standard forward CNN
             x_hat = self.student_grad.forward(x, sigma)
-            Ds = x - x_hat
-            return x_hat, Ds
+            Dg = x - x_hat
+            return x_hat, Dg
 
-    def lossfn(self, x, y):
+    def lossfn(self, x, y): # L2 loss
         criterion = nn.MSELoss(reduction='none')
         return criterion(x.view(x.size()[0], -1), y.view(y.size()[0], -1)).mean(dim=1)
 
     def training_step(self, batch, batch_idx):
-
         y, _ = batch
         sigma = random.uniform(self.hparams.min_sigma_train, self.hparams.max_sigma_train) / 255
         u = torch.randn(y.size(), device=self.device)
         noise_in = u * sigma
         x = y + noise_in
-        x_hat, Ds = self.forward(x, sigma)
+        x_hat, Dg = self.forward(x, sigma)
         loss = self.lossfn(x_hat, y).mean()
         self.train_PSNR.update(x_hat, y)
 
@@ -115,37 +129,32 @@ class GradMatch(pl.LightningModule):
             self.train_teacher_PSNR.reset()
 
     def validation_step(self, batch, batch_idx):
-
         torch.manual_seed(0)
         y, _ = batch
-
-        if self.hparams.test_on_random:
-            y = torch.rand(y.size()).to(self.device)
-
         batch_dict = {}
 
         sigma_list = self.hparams.sigma_list_test
         for i, sigma in enumerate(sigma_list):
             x = y + torch.randn(y.size(), device=self.device) * sigma / 255
-            if self.hparams.use_sigma_model:
+            if self.hparams.use_sigma_model: # Possibility to test with sigma model different than input sigma
                 sigma_model = self.hparams.sigma_model / 255
             else:
                 sigma_model = sigma / 255
             torch.set_grad_enabled(True)
-            if self.hparams.grad_matching:
+            if self.hparams.grad_matching: # GS denoise
                 x_hat = x
-                for n in range(self.hparams.n_step_eval):
+                for n in range(self.hparams.n_step_eval): # 1 step in practice
                     current_model = lambda v: self.forward(v, sigma_model)[0]
                     x_hat = current_model(x_hat)
-                if self.hparams.get_regularization:
-                    f = self.student_grad.forward(x, sigma_model)
-                    s = 0.5 * torch.sum((x - f).view(x.shape[0], -1) ** 2)
-                    batch_dict["s_" + str(sigma)] = s.detach()
+                if self.hparams.get_regularization: # Extract reguralizer value g(x)
+                    N = self.student_grad.forward(x, sigma_model)
+                    g = 0.5 * torch.sum((x - N).view(x.shape[0], -1) ** 2)
+                    batch_dict["g_" + str(sigma)] = g.detach()
                 l = self.lossfn(x_hat, y)
                 self.val_PSNR.reset()
                 p = self.val_PSNR(x_hat, y)
-                Ds = (x - x_hat)
-                Ds_norm = torch.norm(Ds, p=2)
+                Dg = (x - x_hat)
+                Dg_norm = torch.norm(Dg, p=2)
             else:
                 for n in range(self.hparams.n_step_eval):
                     current_model = lambda v: self.forward(v, sigma / 255)[0]
@@ -154,8 +163,8 @@ class GradMatch(pl.LightningModule):
                         x_hat = current_model(x_hat)
                     elif x.size(2) % 8 != 0 or x.size(3) % 8 != 0:
                         x_hat = test_mode(current_model, x_hat, refield=64, mode=5)
-                Ds = (x - x_hat)
-                Ds_norm = torch.norm(Ds, p=2)
+                Dg = (x - x_hat)
+                Dg_norm = torch.norm(Dg, p=2)
                 l = self.lossfn(x_hat, y)
                 self.val_PSNR.reset()
                 p = self.val_PSNR(x_hat, y)
@@ -167,9 +176,9 @@ class GradMatch(pl.LightningModule):
 
             batch_dict["psnr_" + str(sigma)] = p.detach()
             batch_dict["loss_" + str(sigma)] = l.detach()
-            batch_dict["Ds_norm_" + str(sigma)] = Ds_norm.detach()
+            batch_dict["Dg_norm_" + str(sigma)] = Dg_norm.detach()
 
-        if batch_idx == 0:
+        if batch_idx == 0: # logging for tensorboard
             clean_grid = torchvision.utils.make_grid(normalize_min_max(y.detach())[:1])
             noisy_grid = torchvision.utils.make_grid(normalize_min_max(x.detach())[:1])
             denoised_grid = torchvision.utils.make_grid(normalize_min_max(x_hat.detach())[:1])
@@ -216,23 +225,23 @@ class GradMatch(pl.LightningModule):
             res_mean_SN = []
             res_max_SN = []
             res_psnr = []
-            res_Ds = []
+            res_Dg = []
             if self.hparams.get_regularization:
-                res_s = []
+                res_g = []
             for x in outputs:
                 if x["psnr_" + str(sigma)] is not None:
                     res_psnr.append(x["psnr_" + str(sigma)])
-                res_Ds.append(x["Ds_norm_" + str(sigma)])
+                res_Dg.append(x["Dg_norm_" + str(sigma)])
                 if self.hparams.get_regularization:
-                    res_s.append(x["s_" + str(sigma)])
+                    res_g.append(x["g_" + str(sigma)])
                 if self.hparams.get_spectral_norm:
                     res_max_SN.append(x["max_jacobian_norm_" + str(sigma)])
                     res_mean_SN.append(x["mean_jacobian_norm_" + str(sigma)])
             avg_psnr_sigma = torch.stack(res_psnr).mean()
-            avg_Ds_norm = torch.stack(res_Ds).mean()
+            avg_Dg_norm = torch.stack(res_Dg).mean()
             if self.hparams.get_regularization:
-                avg_s = torch.stack(res_s).mean()
-                self.log('val/val_s_sigma=' + str(sigma), avg_s)
+                avg_s = torch.stack(res_g).mean()
+                self.log('val/val_g_sigma=' + str(sigma), avg_s)
             if self.hparams.get_spectral_norm:
                 avg_mean_SN = torch.stack(res_mean_SN).mean()
                 max_max_SN = torch.stack(res_max_SN).max()
@@ -242,7 +251,7 @@ class GradMatch(pl.LightningModule):
                 np.save('res_max_SN_sigma=' + str(sigma) + '.npy', res_max_SN)
                 plt.hist(res_max_SN, bins='auto', label='s = ' + str(sigma), alpha=0.25)
             self.log('val/val_psnr_sigma=' + str(sigma), avg_psnr_sigma)
-            self.log('val/val_Ds_norm_sigma=' + str(sigma), avg_Ds_norm)
+            self.log('val/val_Dg_norm_sigma=' + str(sigma), avg_Dg_norm)
         if self.hparams.get_spectral_norm:
             plt.grid(True)
             plt.legend()
@@ -273,7 +282,9 @@ class GradMatch(pl.LightningModule):
 
     def power_iteration(self, operator, vector_size, steps=100, momentum=0.0,
                         init_vec=None):
-
+        '''
+        Power iteration algorithm for spectral norm calculation
+        '''
         with torch.no_grad():
             if init_vec is None:
                 vec = torch.rand(vector_size).to(self.device)
@@ -313,7 +324,14 @@ class GradMatch(pl.LightningModule):
         return lambda_estimate
 
     def jacobian_spectral_norm(self, y, x_hat, sigma, interpolation=False):
-
+        '''
+        Get spectral norm of Dg the gradient of g
+        :param y:
+        :param x_hat:
+        :param sigma:
+        :param interpolation:
+        :return:
+        '''
         torch.set_grad_enabled(True)
         if interpolation:
             # eta = torch.FloatTensor(y.size(0), 1, 1, 1).uniform_(0, 1)
@@ -325,8 +343,8 @@ class GradMatch(pl.LightningModule):
             x = y
 
         x.requires_grad_(True)
-        x_hat, Ds = self.forward(x, sigma)
-        operator = lambda vec: torch.autograd.grad(Ds, x, grad_outputs=vec, create_graph=True, retain_graph=True, only_inputs=True)[0]
+        x_hat, Dg = self.forward(x, sigma)
+        operator = lambda vec: torch.autograd.grad(Dg, x, grad_outputs=vec, create_graph=True, retain_graph=True, only_inputs=True)[0]
         # operator = lambda vec: torch.autograd.grad(x_hat, x, grad_outputs=vec, create_graph=True, retain_graph=True, only_inputs=True)[0]
         lambda_estimate = self.power_iteration(operator, x.size(), steps=self.hparams.power_method_nb_step,
                                                momentum=self.hparams.power_method_error_momentum)
@@ -344,9 +362,9 @@ class GradMatch(pl.LightningModule):
 
         x.requires_grad_(True)
 
-        x_hat, Ds = self.forward(x, sigma)
+        x_hat, Dg = self.forward(x, sigma)
 
-        gradients = torch.autograd.grad(outputs=Ds, inputs=x, grad_outputs=torch.ones(Ds.size()).to(self.device),
+        gradients = torch.autograd.grad(outputs=Dg, inputs=x, grad_outputs=torch.ones(Dg.size()).to(self.device),
                                         create_graph=True, retain_graph=True, only_inputs=True)[0]
 
         gradients = gradients.view(gradients.size(0), -1)
@@ -372,8 +390,6 @@ class GradMatch(pl.LightningModule):
         parser.add_argument('--act_mode', type=str, default='E')
         parser.add_argument('--no_bias', dest='no_bias', action='store_false')
         parser.set_defaults(use_bias=True)
-        parser.add_argument('--test_on_random', dest='test_on_random', action='store_true')
-        parser.set_defaults(test_on_random=False)
         parser.add_argument('--power_method_nb_step', type=int, default=20)
         parser.add_argument('--power_method_error_threshold', type=float, default=1e-2)
         parser.add_argument('--power_method_error_momentum', type=float, default=0.)
