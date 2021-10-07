@@ -73,9 +73,10 @@ def deblur():
             k = kernels[0, k_index]
             hparams.lamb = 0.1
 
-        kout_path = os.path.join(exp_out_path, 'kernel_'+str(k_index))
-        if not os.path.exists(kout_path):
-            os.mkdir(kout_path)
+        if hparams.extract_images or hparams.extract_curves :
+            kout_path = os.path.join(exp_out_path, 'kernel_'+str(k_index))
+            if not os.path.exists(kout_path):
+                os.mkdir(kout_path)
 
         if hparams.extract_curves:
             PnP_module.initialize_curves()
