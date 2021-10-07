@@ -66,11 +66,13 @@ def SR():
 
         k = kernels[0, k_index].astype(np.float64)
 
-        kout_path = os.path.join(exp_out_path, 'kernel_'+str(k_index))
-        if not os.path.exists(kout_path):
-            os.mkdir(kout_path)
+        if hparams.extract_images or hparams.extract_curves:
+            kout_path = os.path.join(exp_out_path, 'kernel_'+str(k_index))
+            if not os.path.exists(kout_path):
+                os.mkdir(kout_path)
 
-        PnP_module.initialize_curves()
+        if hparams.extract_curves:
+            PnP_module.initialize_curves()
 
         for i in range(min(len(input_paths),hparams.n_images)) : # For each image
 

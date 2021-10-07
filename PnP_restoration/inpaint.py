@@ -54,7 +54,8 @@ def inpaint():
     test_results = OrderedDict()
     test_results['psnr'] = []
 
-    PnP_module.initialize_curves()
+    if hparams.extract_curves:
+        PnP_module.initialize_curves()
 
     psnr_list = []
     psnrY_list = []
