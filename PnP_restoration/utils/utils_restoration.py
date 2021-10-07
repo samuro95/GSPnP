@@ -2,14 +2,12 @@ import numpy as np
 import random
 from scipy.fftpack import dct, idct
 import torch
-import sys
-from argparse import ArgumentParser
-import os
 import cv2
 
 '''
 Copyright (c) 2020 Kai Zhang (cskaizhang@gmail.com)
 '''
+
 
 def imread_uint(path, n_channels=3):
     #  input: path
@@ -25,28 +23,6 @@ def imread_uint(path, n_channels=3):
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # RGB
     return img
 
-
-# def get_upper_deno(img,degradation,degradation_mode):
-#     if degradation_mode == 'deblurring':
-#         k = degradation
-#         upperleft, denominator = utils_deblur.get_uperleft_denominator(img, k)
-#     elif degradation_mode == 'inpainting':
-#         mask = degradation
-#         denominator = mask
-#         upperleft = mask * img
-#     elif degradation_mode == 'poisson':
-#         img_peak, max_val = degradation
-#         upperleft = img
-#         denominator = None
-#     return upperleft, denominator
-
-
-def add_poiss_noise_image(img):
-  c,sy,sx = img.shape
-  lambda_flat = np.reshape(img,[-1,1]).astype(np.float32)
-  noisy_flat = np.random.poisson(lam=lambda_flat)
-  noisy = np.reshape(noisy_flat,[c,sy,sx])
-  return(noisy.astype(np.float32))
 
 def randomCrop(img1,img2,width,height):
     assert img1.shape[0] >= height
@@ -92,21 +68,6 @@ def rgb2y(im):
     y = im.dot(xform.T)
     return y
 
-def modcrop(img_in, scale):
-    # img_in: Numpy, HWC or HW
-    img = np.copy(img_in)
-    if img.ndim == 2:
-        H, W = img.shape
-        H_r, W_r = H % scale, W % scale
-        img = img[:H - H_r, :W - W_r]
-    elif img.ndim == 3:
-        H, W, C = img.shape
-        H_r, W_r = H % scale, W % scale
-        img = img[:int(H-H_r), :int(W-W_r), :]
-    else:
-        raise ValueError('Wrong img ndim: [{:d}].'.format(img.ndim))
-    return img
-
 
 def psnr(img1,img2) :
     if not img1.shape == img2.shape:
@@ -114,7 +75,6 @@ def psnr(img1,img2) :
     img1 = np.float64(img1)
     img2 = np.float64(img2)
     mse = np.mean((img1 - img2)**2)
-    #return 20 * np.log10(255. / np.sqrt(mse))
     return 20 * np.log10(1. / np.sqrt(mse))
 
 def matlab_style_gauss2D(shape=(3,3),sigma=0.5):

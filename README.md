@@ -39,6 +39,7 @@ Checkpoints, tensorboard events and hyperparameters will be saved in the ```GS_d
 cd PnP_restoration
 python denoise.py --dataset_name CBSD68 --noise_level_img 25
 ```
+Add the argument ```--extract_images``` the save the output images.
 
 ## Gradient Step PnP (GS-PnP)
 
@@ -52,7 +53,7 @@ python deblur.py --dataset_name CBSD10 --noise_level_img 7.65
 ```
 
 
-Add the argument ```--extract_images``` the save the output images (slower) and ```--extract_curves``` the save convergence curves.
+Add the argument ```--extract_images``` the save the output images and ```--extract_curves``` the save convergence curves.
 
 
 ### Super-resolution

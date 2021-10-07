@@ -17,19 +17,22 @@ def SR():
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
 
+    # SR specific hyperparameters
     hparams.degradation_mode = 'SR'
     hparams.classical_degradation = True
-
     hparams.relative_diff_F_min = 1e-6
     hparams.lamb = 0.065
     hparams.sigma_denoiser = 2*hparams.noise_level_img
 
+    # PnP_restoration class
     PnP_module = PnP_restoration(hparams)
 
+    # Set input image paths
     input_path = os.path.join(hparams.dataset_path,hparams.dataset_name)
     input_path = os.path.join(input_path,os.listdir(input_path)[0])
     input_paths = os_sorted([os.path.join(input_path,p) for p in os.listdir(input_path)])
 
+    # Output images and curves paths
     den_out_path = 'SR'
     if not os.path.exists(den_out_path):
         os.mkdir(den_out_path)
@@ -46,18 +49,18 @@ def SR():
     if not os.path.exists(exp_out_path):
         os.mkdir(exp_out_path)
 
-    np.random.seed(seed=0)
-
     psnr_list = []
     psnr_list_sr = []
     F_list = []
 
+    # Load the 8 blur kernels
     kernels = hdf5storage.loadmat(hparams.kernel_path)['kernels']
+    # Kernels follow the order given in the paper (Table 3)
     k_list = range(8)
 
     print('\n GS-DRUNET super-resolution with image sigma:{:.3f}, model sigma:{:.3f}, lamb:{:.3f} \n'.format(hparams.noise_level_img, hparams.sigma_denoiser, hparams.lamb))
 
-    for k_index in k_list:
+    for k_index in k_list: # For each kernel
 
         psnr_k_list = []
 
@@ -69,13 +72,15 @@ def SR():
 
         PnP_module.initialize_curves()
 
-        for i in range(min(len(input_paths),hparams.n_images)) :
+        for i in range(min(len(input_paths),hparams.n_images)) : # For each image
 
             print('__ kernel__',k_index, '__ image__',i)
 
+            # load image
             input_im_uint = imread_uint(input_paths[i])
             if hparams.patch_size < min(input_im_uint.shape[0], input_im_uint.shape[1]):
                input_im_uint = crop_center(input_im_uint, hparams.patch_size,hparams.patch_size)
+            # Degrade image
             input_im_uint = modcrop(input_im_uint, hparams.sf)
             input_im = np.float32(input_im_uint / 255.)
             if classical_degradation:
@@ -86,6 +91,7 @@ def SR():
             noise = np.random.normal(0, hparams.noise_level_img/255., blur_im.shape)
             blur_im += noise
 
+            # PnP restoration
             if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
                 deblur_im, output_psnr, output_psnrY, x_list, z_list, Dx_list, psnr_tab, Ds_list, s_list, F_list = PnP_module.restore(blur_im,input_im,k, extract_results=True)
             else :
@@ -97,10 +103,11 @@ def SR():
             psnr_list.append(output_psnr)
 
             if hparams.extract_curves:
+                # Create curves
                 PnP_module.update_curves(x_list, z_list, Dx_list, psnr_tab, Ds_list, s_list, F_list)
 
             if hparams.extract_images:
-
+                # Save images
                 save_im_path = os.path.join(kout_path, 'images')
                 if not os.path.exists(save_im_path):
                     os.mkdir(save_im_path)
@@ -112,6 +119,7 @@ def SR():
                 print('output image saved at ', os.path.join(save_im_path, 'img_' + str(i) + '_GSPnP.png'))
 
         if hparams.extract_curves:
+            # Save curves
             save_curves_path = os.path.join(kout_path, 'curves')
             if not os.path.exists(save_curves_path):
                 os.mkdir(save_curves_path)

@@ -164,7 +164,7 @@ class PnP_restoration():
 
             x_old = x
 
-            ### Denoising of x_old and calculation of F_old
+            #Denoising of x_old and calculation of F_old
             Ds, f = self.denoiser_model.calculate_grad(x_old, self.sigma_denoiser / 255.)
             Ds = Ds.detach()
             f = f.detach()
@@ -176,19 +176,19 @@ class PnP_restoration():
 
             while not backtracking_check:
 
-                ### Gradient step
+                # Gradient step
                 z = (1 - self.hparams.lamb * self.tau) * x_old + self.hparams.lamb * self.tau * Dx
 
-                ### Proximal step
+                # Proximal step
                 x = self.calculate_prox(z)
 
-                ### Calculation of Fnew
+                # Calculation of Fnew
                 f = self.denoiser_model.calculate_grad(x, self.sigma_denoiser / 255.)[1]
                 f = f.detach()
                 s = 0.5 * (torch.norm(x.double() - f.double(), p=2) ** 2)
                 F_new = self.calculate_F(x,s,img_tensor)
 
-                ### Backtracking
+                # Backtracking
                 diff_x = (torch.norm(x - x_old, p=2) ** 2).item()
                 diff_F = F_old - F_new
                 if self.hparams.degradation_mode == 'inpainting':
@@ -201,7 +201,7 @@ class PnP_restoration():
                 else:
                     backtracking_check = True
 
-            ### Logging
+            # Logging
             if extract_results:
                 out_z = tensor2array(z.cpu())
                 out_x = tensor2array(x.cpu())
@@ -221,7 +221,7 @@ class PnP_restoration():
 
             i += 1 # next iteration
 
-        ### post-processing gradient step
+        # post-processing gradient step
         if extract_results:
             Ds, f = self.denoiser_model.calculate_grad(x, self.sigma_denoiser / 255.)
             Ds = Ds.detach()
