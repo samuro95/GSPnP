@@ -1,4 +1,6 @@
-# Gradient Step Denoiser for convergent Plug-and-Play [[Paper](https://arxiv.org/pdf/2110.03220.pdf)]
+# Gradient Step Denoiser for convergent Plug-and-Play
+
+[[Paper](https://arxiv.org/pdf/2110.03220.pdf)]
 
 [Samuel Hurault](https://www.math.u-bordeaux.fr/~shurault/), [Arthur Leclaire](https://www.math.u-bordeaux.fr/~aleclaire/), [Nicolas Papadakis](https://www.math.u-bordeaux.fr/~npapadak/). \
 [Institut de Mathématiques de Bordeaux](https://www.math.u-bordeaux.fr/imb/spip.php), France.
