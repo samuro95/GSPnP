@@ -78,4 +78,14 @@ python inpaint.py --dataset_name set3c --prop_mask 0.5
 This repo contains parts of code taken from : 
 - Deep Plug-and-Play Image Restoration (DPIR) : https://github.com/cszn/DPIR 
 
-
+## Citation 
+```
+@misc{hurault2021gradient,
+      title={Gradient Step Denoiser for convergent Plug-and-Play}, 
+      author={Samuel Hurault and Arthur Leclaire and Nicolas Papadakis},
+      year={2021},
+      eprint={2110.03220},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+```
