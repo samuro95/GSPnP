@@ -125,8 +125,8 @@ class GradMatch(pl.LightningModule):
     def training_epoch_end(self, outputs):
         print('train PSNR updated')
         self.train_PSNR.reset()
-        if self.hparams.transfer_learning:
-            self.train_teacher_PSNR.reset()
+        #if self.hparams.transfer_learning:
+        #    self.train_teacher_PSNR.reset()
 
     def validation_step(self, batch, batch_idx):
         torch.manual_seed(0)
