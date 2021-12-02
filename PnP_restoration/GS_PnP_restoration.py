@@ -275,7 +275,7 @@ class PnP_restoration():
         self.prox.append(np.sqrt(np.array([np.sum(np.abs(prox_list[i + 1] - prox_list[i]) ** 2) for i in range(len(x_list[:-1]))]) / np.array([np.sum(np.abs(z_list[i + 1] - z_list[i]) ** 2) for i in range(len(z_list[:-1]))])))
         rprox_list = 2 * prox_list - z_list
         self.rprox.append(np.sqrt(np.array([np.sum(np.abs(rprox_list[i + 1] - rprox_list[i]) ** 2) for i in range(len(rprox_list[:-1]))]) / np.array([np.sum(np.abs(z_list[i + 1] - z_list[i]) ** 2) for i in range(len(rprox_list[:-1]))])))
-        self.conv.append(np.sqrt(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(len(x_list) - 1)]) / np.sum(np.abs(x_list[0]) ** 2)))
+        self.conv.append(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(len(x_list) - 1)]) / np.sum(np.abs(x_list[0]) ** 2))
         self.lip_algo.append(np.sqrt(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(1, len(x_list) - 1)]) / np.array([np.sum(np.abs(x_list[k] - x_list[k - 1]) ** 2) for k in range(1, len(x_list[:-1]))])))
         self.lip_D.append(np.sqrt(np.array([np.sum(np.abs(Dx_list[i + 1] - Dx_list[i]) ** 2) for i in range(len(Dx_list) - 1)]) / np.array([np.sum(np.abs(x_list[i + 1] - x_list[i]) ** 2) for i in range(len(x_list) - 1)])))
         self.PSNR.append(psnr_tab)
