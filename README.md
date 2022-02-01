@@ -1,4 +1,4 @@
-# 
+# Gradient Step Denoiser for convergent Plug-and-Play
 
 Code for the paper "Gradient Step Denoiser for convergent Plug-and-Play" published at ICLR 2022. 
 
