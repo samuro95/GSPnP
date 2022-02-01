@@ -1,6 +1,8 @@
-# Gradient Step Denoiser for convergent Plug-and-Play
+# 
 
-[[Paper](https://arxiv.org/pdf/2110.03220.pdf)]
+Code for the paper "Gradient Step Denoiser for convergent Plug-and-Play" published at ICLR 2022. 
+
+[[Paper](https://openreview.net/pdf?id=fPhKeld3Okz)]
 
 [Samuel Hurault](https://www.math.u-bordeaux.fr/~shurault/), [Arthur Leclaire](https://www.math.u-bordeaux.fr/~aleclaire/), [Nicolas Papadakis](https://www.math.u-bordeaux.fr/~npapadak/). \
 [Institut de Mathématiques de Bordeaux](https://www.math.u-bordeaux.fr/imb/spip.php), France.
