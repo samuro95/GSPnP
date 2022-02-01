@@ -82,12 +82,13 @@ This repo contains parts of code taken from :
 
 ## Citation 
 ```
-@misc{hurault2021gradient,
-      title={Gradient Step Denoiser for convergent Plug-and-Play}, 
-      author={Samuel Hurault and Arthur Leclaire and Nicolas Papadakis},
-      year={2021},
-      eprint={2110.03220},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+@inproceedings{
+hurault2022gradient,
+title={Gradient Step Denoiser for convergent Plug-and-Play},
+author={Samuel Hurault and Arthur Leclaire and Nicolas Papadakis},
+booktitle={International Conference on Learning Representations},
+year={2022},
+url={https://openreview.net/forum?id=fPhKeld3Okz}
 }
+
 ```
