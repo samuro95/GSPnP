@@ -69,7 +69,7 @@ python SR.py --dataset_name CBSD10 --noise_level_img 7.65 --sf 2
 ```
 
 ### Inpainting
-Inpainting on set3C images, with randomly masked pixels (with probability ```prop_mask = 0.5```) sequentially blurred with the 10 different kernels exposed in the paper:
+Inpainting on set3C images, with randomly masked pixels (with probability ```prop_mask = 0.5```) :
 ```
 cd PnP_restoration
 python inpaint.py --dataset_name set3c --prop_mask 0.5
