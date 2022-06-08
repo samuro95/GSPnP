@@ -28,8 +28,7 @@ class PnP_restoration():
         parser2 = GradMatch.add_model_specific_args(parser2)
         parser2 = GradMatch.add_optim_specific_args(parser2)
         hparams = parser2.parse_known_args()[0]
-        if 'nb_4' in self.hparams.pretrained_checkpoint :
-            hparams.DRUNET_nb = 4
+        hparams.act_mode = self.hparams.act_mode_denoiser
         self.denoiser_model = GradMatch(hparams)
         checkpoint = torch.load(self.hparams.pretrained_checkpoint, map_location=self.device)
         self.denoiser_model.load_state_dict(checkpoint['state_dict'])
@@ -377,4 +376,5 @@ class PnP_restoration():
         parser.set_defaults(extract_images=False)
         parser.add_argument('--print_each_step', dest='print_each_step', action='store_true')
         parser.set_defaults(print_each_step=False)
+        parser.add_argument('--act_mode_denoiser', type=str, default='E')
         return parser
