@@ -8,10 +8,6 @@ Code for the paper "Gradient Step Denoiser for convergent Plug-and-Play" publish
 [Institut de Mathématiques de Bordeaux](https://www.math.u-bordeaux.fr/imb/spip.php), France.
 
 
-
-
-<img src="images/results.png" width="800px"/> 
-
 ## Prerequisites
 
 
