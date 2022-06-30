@@ -57,12 +57,12 @@ if __name__ == '__main__':
         trainer = pl.Trainer.from_argparse_args(hparams, logger=tb_logger, gpus=-1, val_check_interval=hparams.val_check_interval,
                                                 resume_from_checkpoint=hparams.pretrained_checkpoint,
                                                 gradient_clip_val=hparams.gradient_clip_val, accelerator='ddp',
-                                                max_epochs = 1500,
+                                                max_epochs = 1200,
                                                 callbacks=[lr_monitor])
     else :
         trainer = pl.Trainer.from_argparse_args(hparams, logger=tb_logger,gpus=-1,val_check_interval=hparams.val_check_interval,
                                                 gradient_clip_val=hparams.gradient_clip_val, log_gpu_memory='all', accelerator='ddp',
-                                                max_epochs = 1500,
+                                                max_epochs = 1200,
                                                 callbacks=[lr_monitor])
 
     trainer.fit(model, dm)

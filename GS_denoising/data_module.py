@@ -16,34 +16,41 @@ class DataModule(pl.LightningDataModule):
         self.hparams.train_dataset_path = os.path.join(self.hparams.dataset_path,'DRUNET')
         self.hparams.test_dataset_path = os.path.join(self.hparams.dataset_path,self.hparams.dataset_name)
 
-        self.train_transform = transforms.Compose([
-            transforms.RandomCrop(self.hparams.train_patch_size, pad_if_needed=True),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.5),
-            transforms.ToTensor(),
-        ])
+        if self.hparams.grayscale :  
+            self.train_transform = transforms.Compose([
+                transforms.RandomCrop(self.hparams.train_patch_size, pad_if_needed=True),
+                transforms.functional.rgb_to_grayscale,
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomVerticalFlip(p=0.5),
+                transforms.ToTensor(),
+            ])
+        else :
+            self.train_transform = transforms.Compose([
+                transforms.RandomCrop(self.hparams.train_patch_size, pad_if_needed=True),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomVerticalFlip(p=0.5),
+                transforms.ToTensor(),
+            ])
+
+
+        val_transform_list = []
 
         if self.hparams.test_resize :
             if self.hparams.test_resize_mode == 'center_crop':
-                self.val_transform = transforms.Compose([
-                    transforms.CenterCrop(self.hparams.test_patch_size),
-                    transforms.ToTensor()
-                ])
+                resize_transform = transforms.CenterCrop(self.hparams.test_patch_size)
             elif self.hparams.test_resize_mode == 'random_crop':
-                self.val_transform = transforms.Compose([
-                    transforms.RandomCrop(self.hparams.test_patch_size,pad_if_needed=True),
-                    transforms.ToTensor()
-                ])
+                resize_transform = transforms.RandomCrop(self.hparams.test_patch_size,pad_if_needed=True)
             else :
-                self.val_transform = transforms.Compose([
-                    transforms.Resize(self.hparams.test_patch_size),
-                    transforms.ToTensor(),
-                ])
+                resize_transform = transforms.Resize(self.hparams.test_patch_size)
 
-        else :
-            self.val_transform = transforms.Compose([
-                    transforms.ToTensor(),
-                ])
+            val_transform_list.append(resize_transform)
+        
+        if self.hparams.grayscale : 
+             val_transform_list.append(transforms.functional.rgb_to_grayscale)
+        
+        val_transform_list.append(transforms.ToTensor())
+
+        self.val_transform = transforms.Compose(val_transform_list)
 
     def setup(self, stage=None):
 
@@ -98,4 +105,6 @@ class DataModule(pl.LightningDataModule):
         parser.add_argument('--batch_size_train', type=int, default=16)
         parser.add_argument('--batch_size_test', type=int, default=8)
         parser.add_argument('--test_resize_mode', type=str, default='center_crop')
+        parser.add_argument('--grayscale', dest='grayscale', action='store_true')
+        parser.set_defaults(grayscale=False)
         return parser

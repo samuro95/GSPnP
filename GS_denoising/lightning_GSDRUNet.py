@@ -20,10 +20,10 @@ class StudentGrad(pl.LightningModule):
     '''
     Standard DRUNet model
     '''
-    def __init__(self, model_name, pretrained, pretrained_checkpoint, act_mode, DRUNET_nb):
+    def __init__(self, model_name, pretrained, pretrained_checkpoint, act_mode, DRUNET_nb, in_nc,out_nc):
         super().__init__()
         self.model_name = model_name
-        self.model = UNetRes(in_nc=4, out_nc=3, nc=[64, 128, 256, 512], nb=DRUNET_nb, act_mode=act_mode,
+        self.model = UNetRes(in_nc=in_nc, out_nc=out_nc, nc=[64, 128, 256, 512], nb=DRUNET_nb, act_mode=act_mode,
                              downsample_mode='strideconv', upsample_mode='convtranspose')
         if pretrained:
             checkpoint = torch.load(pretrained_checkpoint, map_location=self.device)
@@ -49,9 +49,15 @@ class GradMatch(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters(hparams)
+        if self.hparams.grayscale : 
+            in_nc = 2 
+            out_nc = 1
+        else :
+            in_nc = 4
+            out_nc = 3
         self.student_grad = StudentGrad(self.hparams.model_name, self.hparams.pretrained_student,
                                         self.hparams.pretrained_checkpoint, self.hparams.act_mode,
-                                        self.hparams.DRUNET_nb)
+                                        self.hparams.DRUNET_nb, in_nc, out_nc)
         self.train_PSNR = torchmetrics.PSNR(data_range=1.0)
         self.val_PSNR = torchmetrics.PSNR(data_range=1.0)
         self.train_teacher_PSNR = torchmetrics.PSNR(data_range=1.0)
@@ -86,10 +92,7 @@ class GradMatch(pl.LightningModule):
         '''
         if self.hparams.grad_matching: # If gradient step denoising
             Dg, f = self.calculate_grad(x, sigma)
-            if self.hparams.sigma_step: # possibility to multiply Dg by sigma
-                x_hat = x - self.hparams.weight_Ds * sigma * Dg
-            else: # as realized in the paper (with weight_Ds=1)
-                x_hat = x - self.hparams.weight_Ds * Dg
+            x_hat = x - self.hparams.weight_Ds * Dg
             return x_hat, Dg
         else: # If denoising with standard forward CNN
             x_hat = self.student_grad.forward(x, sigma)
