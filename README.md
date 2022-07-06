@@ -31,9 +31,12 @@ python main_train.py --name experiment_name --log_folder logs
 ```
 Checkpoints, tensorboard events and hyperparameters will be saved in the ```GS_denoising/logs/experiment_name``` subfolder. 
 
+For denoising grayscale images, add the argument --grayscale
+
 ### Testing 
 
-- Download pretrained checkpoint from https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
+- Download pretrained checkpoint https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing  for color denoising or https://plmbox.math.cnrs.fr/f/1c12f9ec98b64fadac09/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
+
 - For denoising the whole CBSD68 dataset at input Gaussian noise level 25 :
 ```
 cd PnP_restoration
@@ -45,7 +48,8 @@ Add the argument ```--extract_images``` the save the output images.
 
 ### Deblurring
 
-- If not already done, download pretrained checkpoint from https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing and save it as ```GS_denoising/ckpts/GSDRUNET.ckpt```
+- Download pretrained checkpoint https://drive.google.com/file/d/1aafXsJG50FHdNIBYfQZ2jRKTfY0ig6Zi/view?usp=sharing  for color denoising or https://plmbox.math.cnrs.fr/f/1c12f9ec98b64fadac09/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
+
 - For deblurring the CBSD10 images at input Gaussian noise level ```7.65```, sequentially blurred with the 10 different kernels exposed in the paper:
 ```
 cd PnP_restoration
