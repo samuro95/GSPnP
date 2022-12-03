@@ -37,11 +37,19 @@ For denoising grayscale images, add the argument --grayscale
 
 - Download pretrained checkpoint https://plmbox.math.cnrs.fr/f/ab6829cb933743848bef/?dl=1  for color denoising or https://plmbox.math.cnrs.fr/f/04318d36824443a6bf8d/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
 
-- For denoising the whole CBSD68 dataset at input Gaussian noise level 25 :
+- For denoising a single image IMAGE_PATH at input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$) :
 ```
 cd PnP_restoration
-python denoise.py --dataset_name CBSD68 --noise_level_img 25
+python denoise.py --image_path IMAGE_PATH --noise_level_img NOISE_LEVEL
 ```
+
+- For denoising a set of images. Place your images in directory ```datasets/DATASET_NAME``` 
+```
+cd PnP_restoration
+python denoise.py --dataset_name DATASET_NAME
+```
+Datasets CBSD68, CBSD10, set3c are already present in the directory. Default value is CBSD10. 
+
 
 ## Gradient Step PnP (GS-PnP)
 
@@ -49,30 +57,44 @@ python denoise.py --dataset_name CBSD68 --noise_level_img 25
 
 - Download pretrained checkpoint https://plmbox.math.cnrs.fr/f/ab6829cb933743848bef/?dl=1  for color denoising or https://plmbox.math.cnrs.fr/f/04318d36824443a6bf8d/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
 
-- For deblurring the CBSD10 images at input Gaussian noise level ```7.65```, sequentially blurred with the 10 different kernels exposed in the paper:
+- For deblurring an input image IMAGE_PATH, blurred with kernel saved at KERNEL_PATH (saved as ```.npy```) and with input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$)
+
 ```
 cd PnP_restoration
-python deblur.py --dataset_name CBSD10 --noise_level_img 7.65 
+python deblur.py --image_path IMAGE_PATH --kernel_path KERNEL_PATH --noise_level_img NOISE_LEVEL
 ```
 
+By default, without specifying ```--kernel_path ```, deblurring will be performed on the 10 kernels evaluated in the paper. You can specify  ```--kernel_index``` to choose a specific kernel in this list. 
+
+You can also specify ```--dataset_name``` to treat a set of images places in in directory ```datasets/DATASET_NAME``` 
 
 Add the argument ```--extract_curves``` the save convergence curves.
 
 
 ### Super-resolution
 
-For performing super-resolution of CBSD10 images, downscaled with scale ```sf```, Gaussian noise level ```7.65```, and  sequentially blurred with the 8 different kernels exposed in the paper:
+For performing super-resolution of the input image IMAGE_PATH, downscaled with scale ```sf```, Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$)
+
 ```
 cd PnP_restoration
-python SR.py --dataset_name CBSD10 --noise_level_img 7.65 --sf 2
+python SR.py --noise_level_img NOISE_LEVEL --sf 2
 ```
 
+By default, without specifying ```--kernel_path ```, deblurring will be performed on the 8 kernels evaluated in the paper. You can specify  ```--kernel_index``` to choose a specific kernel in this list. 
+
+You can also specify ```--dataset_name``` to treat a set of images places in in directory ```datasets/DATASET_NAME``` 
+
+
+Add the argument ```--extract_curves``` the save convergence curves.
+
 ### Inpainting
-Inpainting on set3C images, with randomly masked pixels (with probability ```prop_mask = 0.5```) :
+Inpainting with randomly masked pixels (with probability ```prop_mask = 0.5```) :
 ```
 cd PnP_restoration
-python inpaint.py --dataset_name set3c --prop_mask 0.5
+python inpaint.py --prop_mask 0.5
 ```
+
+Add the argument ```--extract_curves``` the save convergence curves.
 
 ## Acknowledgments
 
