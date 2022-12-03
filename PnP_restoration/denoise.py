@@ -11,6 +11,7 @@ from utils.utils_restoration import psnr, array2tensor, tensor2array
 def denoise():
 
     parser = ArgumentParser()
+    parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
 
@@ -21,9 +22,12 @@ def denoise():
     PnP_module = PnP_restoration(hparams)
 
     # Set input image paths
-    input_path = os.path.join(hparams.dataset_path, hparams.dataset_name)
-    input_path = os.path.join(input_path, os.listdir(input_path)[0])
-    input_paths = os_sorted([os.path.join(input_path, p) for p in os.listdir(input_path)])
+    if hparams.image_path is not None : # if a specific image path is given
+        input_paths = [hparams.image_path]
+        hparams.dataset_name = os.path.splitext(os.path.split(hparams.image_path)[-1])[0]
+    else : # if not given, we aply on the whole dataset name given in argument 
+        input_path = os.path.join(hparams.dataset_path,hparams.dataset_name)
+        input_paths = os_sorted([os.path.join(input_path,p) for p in os.listdir(input_path)])
 
     # Output images and curves paths
     if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:

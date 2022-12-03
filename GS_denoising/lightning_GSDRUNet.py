@@ -436,4 +436,6 @@ class GradMatch(pl.LightningModule):
         parser.add_argument('--sigma_model', type=int, default=25)
         parser.add_argument('--get_regularization', dest='get_regularization', action='store_true')
         parser.set_defaults(get_regularization=False)
+        parser.add_argument('--grayscale', dest='grayscale', action='store_true')
+        parser.set_defaults(grayscale=False)
         return parser

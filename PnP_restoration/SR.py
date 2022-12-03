@@ -13,7 +13,9 @@ def SR():
 
     parser = ArgumentParser()
     parser.add_argument('--sf', type=int, default=2)
-    parser.add_argument('--kernel_path', type=str, default=os.path.join('kernels','kernels_12.mat'))
+    parser.add_argument('--kernel_path', type=str)
+    parser.add_argument('--kernel_index', type=int)
+    parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
 
@@ -28,9 +30,12 @@ def SR():
     PnP_module = PnP_restoration(hparams)
 
     # Set input image paths
-    input_path = os.path.join(hparams.dataset_path,hparams.dataset_name)
-    input_path = os.path.join(input_path,os.listdir(input_path)[0])
-    input_paths = os_sorted([os.path.join(input_path,p) for p in os.listdir(input_path)])
+    if hparams.image_path is not None : # if a specific image path is given
+        input_paths = [hparams.image_path]
+        hparams.dataset_name = os.path.splitext(os.path.split(hparams.image_path)[-1])[0]
+    else : # if not given, we aply on the whole dataset name given in argument 
+        input_path = os.path.join(hparams.dataset_path,hparams.dataset_name)
+        input_paths = os_sorted([os.path.join(input_path,p) for p in os.listdir(input_path)])
 
     # Output images and curves paths
     den_out_path = 'SR'
@@ -53,18 +58,30 @@ def SR():
     psnr_list_sr = []
     F_list = []
 
-    # Load the 8 blur kernels
-    kernels = hdf5storage.loadmat(hparams.kernel_path)['kernels']
-    # Kernels follow the order given in the paper (Table 3)
-    k_list = range(8)
+    if hparams.kernel_path is not None : # if a specific kernel saved in hparams.kernel_path as np array is given 
+        k_list = [np.load(hparams.kernel_path)]
+        k_index_list = [0]
+    else : 
+        k_list = []
+        # If no specific kernel is given, load the 8 blur kernels
+        kernel_path = os.path.join('kernels','kernels_12.mat')
+        kernels = hdf5storage.loadmat(kernel_path)['kernels']
+        # Kernels follow the order given in the paper (Table 2). The 8 first kernels are motion blur kernels, the 9th kernel is uniform and the 10th Gaussian.
+        for k_index in range(8) :
+            k = kernels[0, k_index]
+            k_list.append(k)
+        if hparams.kernel_index is not None : 
+            k_index_list = [hparams.kernel_index]
+        else :
+            k_index_list = range(len(k_list))
 
     print('\n GS-DRUNET super-resolution with image sigma:{:.3f}, model sigma:{:.3f}, lamb:{:.3f} \n'.format(hparams.noise_level_img, hparams.sigma_denoiser, hparams.lamb))
 
-    for k_index in k_list: # For each kernel
+    for k_index in k_index_list : # For each kernel
 
         psnr_k_list = []
 
-        k = kernels[0, k_index].astype(np.float64)
+        k = k_list[k_index]
 
         if hparams.extract_images or hparams.extract_curves:
             kout_path = os.path.join(exp_out_path, 'kernel_'+str(k_index))
@@ -114,7 +131,6 @@ def SR():
                 if not os.path.exists(save_im_path):
                     os.mkdir(save_im_path)
 
-                imsave(os.path.join(save_im_path, 'kernel_' + str(k_index) + '.png'), single2uint(deblur_im))
                 imsave(os.path.join(save_im_path, 'img_' + str(i) + '_input.png'), input_im_uint)
                 imsave(os.path.join(save_im_path, 'img_' + str(i) + '_HR.png'), single2uint(deblur_im))
                 imsave(os.path.join(save_im_path, 'img_' + str(i) + '_GSPnP.png'), single2uint(blur_im))
