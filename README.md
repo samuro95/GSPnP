@@ -37,13 +37,13 @@ For denoising grayscale images, add the argument --grayscale
 
 - Download pretrained checkpoint https://plmbox.math.cnrs.fr/f/ab6829cb933743848bef/?dl=1  for color denoising or https://plmbox.math.cnrs.fr/f/04318d36824443a6bf8d/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
 
-- For denoising a single image IMAGE_PATH at input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$) :
+- For denoising a single (clean) image IMAGE_PATH, taht will be noised with input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$) :
 ```
 cd PnP_restoration
 python denoise.py --image_path IMAGE_PATH --noise_level_img NOISE_LEVEL
 ```
 
-- For denoising a set of images. Place your images in directory ```datasets/DATASET_NAME``` 
+- For denoising a set of (clean) images. Place your images in directory ```datasets/DATASET_NAME``` 
 ```
 cd PnP_restoration
 python denoise.py --dataset_name DATASET_NAME
@@ -57,7 +57,7 @@ Datasets CBSD68, CBSD10, set3c are already present in the directory. Default val
 
 - Download pretrained checkpoint https://plmbox.math.cnrs.fr/f/ab6829cb933743848bef/?dl=1  for color denoising or https://plmbox.math.cnrs.fr/f/04318d36824443a6bf8d/?dl=1 for grayscale denoising and save it as ```GS_denoising/ckpts/GSDRUNet.ckpt```
 
-- For deblurring an input image IMAGE_PATH, blurred with kernel saved at KERNEL_PATH (saved as ```.npy```) and with input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$)
+- For deblurring an input (clean) image IMAGE_PATH, that we blur with kernel saved at KERNEL_PATH (saved as ```.npy```) and with input Gaussian noise level NOISE_LEVEL (```int``` $\in [0,255]$)
 
 ```
 cd PnP_restoration
