@@ -58,9 +58,6 @@ class GradMatch(pl.LightningModule):
         self.student_grad = StudentGrad(self.hparams.model_name, self.hparams.pretrained_student,
                                         self.hparams.pretrained_checkpoint, self.hparams.act_mode,
                                         self.hparams.DRUNET_nb, in_nc, out_nc)
-        self.train_PSNR = torchmetrics.PSNR(data_range=1.0)
-        self.val_PSNR = torchmetrics.PSNR(data_range=1.0)
-        self.train_teacher_PSNR = torchmetrics.PSNR(data_range=1.0)
 
 
     def calculate_grad(self, x, sigma):
@@ -111,11 +108,10 @@ class GradMatch(pl.LightningModule):
         x = y + noise_in
         x_hat, Dg = self.forward(x, sigma)
         loss = self.lossfn(x_hat, y).mean()
-        self.train_PSNR.update(x_hat, y)
+        train_PSNR = psnr(x_hat, y)
 
-        psnr = self.train_PSNR.compute()
         self.log('train/train_loss', loss.detach())
-        self.log('train/train_psnr', psnr.detach(), prog_bar=True)
+        self.log('train/train_psnr', train_PSNR.detach(), prog_bar=True)
 
         if batch_idx == 0:
             noisy_grid = torchvision.utils.make_grid(normalize_min_max(x.detach())[:1])
@@ -125,11 +121,6 @@ class GradMatch(pl.LightningModule):
 
         return loss
 
-    def training_epoch_end(self, outputs):
-        print('train PSNR updated')
-        self.train_PSNR.reset()
-        #if self.hparams.transfer_learning:
-        #    self.train_teacher_PSNR.reset()
 
     def validation_step(self, batch, batch_idx):
         torch.manual_seed(0)
@@ -154,8 +145,7 @@ class GradMatch(pl.LightningModule):
                     g = 0.5 * torch.sum((x - N).view(x.shape[0], -1) ** 2)
                     batch_dict["g_" + str(sigma)] = g.detach()
                 l = self.lossfn(x_hat, y)
-                self.val_PSNR.reset()
-                p = self.val_PSNR(x_hat, y)
+                p = psnr(x_hat, y)
                 Dg = (x - x_hat)
                 Dg_norm = torch.norm(Dg, p=2)
             else:
@@ -169,8 +159,7 @@ class GradMatch(pl.LightningModule):
                 Dg = (x - x_hat)
                 Dg_norm = torch.norm(Dg, p=2)
                 l = self.lossfn(x_hat, y)
-                self.val_PSNR.reset()
-                p = self.val_PSNR(x_hat, y)
+                p = psnr(x_hat, y)
 
             if self.hparams.get_spectral_norm:
                 jacobian_norm = self.jacobian_spectral_norm(y, x_hat, sigma_model)
@@ -220,8 +209,6 @@ class GradMatch(pl.LightningModule):
         return batch_dict
 
     def validation_epoch_end(self, outputs):
-
-        self.val_PSNR.reset()
 
         sigma_list = self.hparams.sigma_list_test
         for i, sigma in enumerate(sigma_list):

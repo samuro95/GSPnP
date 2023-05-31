@@ -31,7 +31,7 @@ class PnP_restoration():
         hparams.act_mode = self.hparams.act_mode_denoiser
         self.denoiser_model = GradMatch(hparams)
         checkpoint = torch.load(self.hparams.pretrained_checkpoint, map_location=self.device)
-        self.denoiser_model.load_state_dict(checkpoint['state_dict'])
+        self.denoiser_model.load_state_dict(checkpoint['state_dict'],strict=False)
         self.denoiser_model.eval()
         for i, v in self.denoiser_model.named_parameters():
             v.requires_grad = False
@@ -49,11 +49,11 @@ class PnP_restoration():
         if self.hparams.degradation_mode == 'deblurring':
             self.k = degradation
             self.k_tensor = array2tensor(np.expand_dims(self.k, 2)).double().to(self.device)
-            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate(img, self.k_tensor, 1)
+            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate_prox(img, self.k_tensor, 1)
         elif self.hparams.degradation_mode == 'SR':
             self.k = degradation
             self.k_tensor = array2tensor(np.expand_dims(self.k, 2)).double().to(self.device)
-            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate(img, self.k_tensor, self.hparams.sf)
+            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate_prox(img, self.k_tensor, self.hparams.sf)
         elif self.hparams.degradation_mode == 'inpainting':
             self.M = array2tensor(degradation).double().to(self.device)
             self.My = self.M*img
@@ -68,10 +68,10 @@ class PnP_restoration():
         '''
         if self.hparams.degradation_mode == 'deblurring':
             rho = torch.tensor([1/self.tau]).double().repeat(1, 1, 1, 1).to(self.device)
-            px = utils_sr.data_solution(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, 1)
+            px = utils_sr.prox_solution_L2(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, 1)
         elif self.hparams.degradation_mode == 'SR':
             rho = torch.tensor([1 / self.tau]).double().repeat(1, 1, 1, 1).to(self.device)
-            px = utils_sr.data_solution(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, self.hparams.sf)
+            px = utils_sr.prox_solution_L2(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, self.hparams.sf)
         elif self.hparams.degradation_mode == 'inpainting':
             if self.hparams.noise_level_img > 1e-2:
                 px = (self.tau*self.My + img)/(self.tau*self.M+1)
@@ -81,26 +81,84 @@ class PnP_restoration():
             print('degradation mode not treated')
         return px
 
-    def calculate_F(self,x,s,img):
+    # def calculate_F(self,x,s,img):
+    #     '''
+    #     Calculation of the objective function value f + lamb*s
+    #     :param x: Point where to evaluate F
+    #     :param s: Precomputed regularization function value
+    #     :param img: Degraded image
+    #     :return: F(x)
+    #     '''
+    #     if self.hparams.degradation_mode == 'deblurring':
+    #         deg_x = utils_sr.imfilter(x.double(),self.k_tensor[0].double().flip(1).flip(2).expand(3,-1,-1,-1))
+    #         F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
+    #     elif self.hparams.degradation_mode == 'SR':
+    #         deg_x = utils_sr.imfilter(x.double(), self.k_tensor[0].double().flip(1).flip(2).expand(3, -1, -1, -1))
+    #         deg_x = deg_x[...,0::self.hparams.sf, 0::self.hparams.sf]
+    #         F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
+    #     elif self.hparams.degradation_mode == 'inpainting':
+    #         deg_x = self.M*x.double()
+    #         F = 0.5*torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
+    #     else :
+    #         print('degradation not implemented')
+    #     return F.item()
+
+    def A(self,y):
         '''
-        Calculation of the objective function value f + lamb*s
-        :param x: Point where to evaluate F
-        :param s: Precomputed regularization function value
-        :param img: Degraded image
-        :return: F(x)
+        Calculation A*x with A the linear degradation operator 
         '''
         if self.hparams.degradation_mode == 'deblurring':
-            deg_x = utils_sr.imfilter(x.double(),self.k_tensor[0].double().flip(1).flip(2).expand(3,-1,-1,-1))
-            F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
+            y = utils_sr.G(y, self.k_tensor, sf=1)
         elif self.hparams.degradation_mode == 'SR':
-            deg_x = utils_sr.imfilter(x.double(), self.k_tensor[0].double().flip(1).flip(2).expand(3, -1, -1, -1))
-            deg_x = deg_x[...,0::self.hparams.sf, 0::self.hparams.sf]
-            F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
+            y = utils_sr.G(y, self.k_tensor, sf=self.sf)
         elif self.hparams.degradation_mode == 'inpainting':
-            deg_x = self.M*x.double()
-            F = 0.5*torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
-        else :
-            print('degradation not implemented')
+            y = self.M * y
+        else:
+            raise ValueError('degradation not implemented')
+        return y  
+
+    def At(self,y):
+        '''
+        Calculation A*x with A the linear degradation operator 
+        '''
+        if self.hparams.degradation_mode == 'deblurring':
+            y = utils_sr.Gt(y, self.k_tensor, sf=1)
+        elif self.hparams.degradation_mode == 'SR':
+            y = utils_sr.Gt(y, self.k_tensor, sf=self.sf)
+        elif self.hparams.degradation_mode == 'inpainting':
+            y = self.M * y
+        else:
+            raise ValueError('degradation not implemented')
+        return y  
+
+
+    def calulate_data_term(self,y,img):
+        '''
+        Calculation of the data term value f(y)
+        :param y: Point where to evaluate F
+        :param img: Degraded image
+        :return: f(y)
+        '''
+        deg_y = self.A(y)
+        if self.hparams.noise_model == 'gaussian':
+            f = 0.5 * torch.norm(img - deg_y, p=2) ** 2
+        elif self.hparams.noise_model == 'poisson':
+            f = (img*torch.log(img/deg_y + 1e-15) + deg_y - img).sum()
+        else:
+            raise ValueError('noise model not implemented')
+        return f
+
+
+    def calculate_F(self,y,s,img):
+        '''
+        Calculation of the objective function value f + lamb*s
+        :param y: Point where to evaluate F
+        :param s: Precomputed regularization function value
+        :param img: Degraded image
+        :return: F(y)
+        '''
+        f = self.calulate_data_term(y,img)
+        F = f + self.hparams.lamb * s
         return F.item()
 
     def restore(self, img, clean_img, degradation,extract_results=False):
@@ -354,6 +412,7 @@ class PnP_restoration():
         parser.add_argument('--PnP_algo', type=str, default='HQS')
         parser.add_argument('--dataset_name', type=str, default='CBSD10')
         parser.add_argument('--sigma_denoiser', type=float)
+        parser.add_argument('--noise_model', type=str, default='gaussian')
         parser.add_argument('--noise_level_img', type=float, default=2.55)
         parser.add_argument('--maxitr', type=int, default=400)
         parser.add_argument('--lamb', type=float, default=0.1)
