@@ -12,8 +12,8 @@ venv/
 *.gz
 *.npy
 *.pyc
-PnP_restoration/deblur/
-PnP_restoration/inpaint/
+PnP_restoration/deblurring/
+PnP_restoration/inpainting/
 PnP_restoration/SR/
 PnP_restoration/denoise/
 datasets/DRUNET/
