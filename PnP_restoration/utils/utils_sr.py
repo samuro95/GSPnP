@@ -252,7 +252,7 @@ def Wiener_filter(x, k, stepsize, sf):
     invW = torch.mean(splits(F2B, sf), dim=-1, keepdim=False)
     invWBR = cdiv(FBR, csum(invW, alpha))
     FCBinvWBR = cmul(FBC, invWBR.repeat(1, 1, sf, sf, 1))
-    FX = (FR - FCBinvWBR)
+    FX = (FR - FCBinvWBR) / alpha.unsqueeze(-1)
     Xest = ifft(FX)
     return Xest
 
@@ -289,10 +289,9 @@ def grad_solution_KL(x, y, k, sf, alpha):
     k: kernel, hxw
     sf: scale factor
     '''
-    I = alpha*torch.ones_like(x) - y/G(x, k, sf=sf)
-    return Gt(I, k, sf=sf)
-
-
+    I = torch.ones_like(x) - y/G(x, k, sf=sf)
+    grad = Gt(I, k, sf=sf)
+    return grad
 
 
 '''
@@ -368,13 +367,14 @@ def unpad_circular(input,padding):
     return out
 
 
-def imfilter(x, k, transposed=False):
+def imfilter(x, k, transposed=False, n_channel=3):
     '''
     Equivalent (verified) to scipy ndimage.convolve with mode='wrap'.
     x: image, NxcxHxW
     k: kernel, hxw
     '''
-    k = k.repeat(3, 1, 1, 1)
+    n_channel = x.shape[1]
+    k = k.repeat(n_channel, 1, 1, 1)
     k = k.flip(-1).flip(-2) # flip kernel for convolution and not correlation !!!
     ph = (k.shape[-2] - 1)//2
     pw = (k.shape[-1] - 1)//2
@@ -451,3 +451,4 @@ def shift_pixel(x, sf, upper_left=True):
             x[:, :, i] = interp2d(xv, yv, x[:, :, i])(x1, y1)
 
     return x
+

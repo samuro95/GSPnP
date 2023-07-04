@@ -3,13 +3,43 @@ import random
 from scipy.fftpack import dct, idct
 import torch
 import cv2
+import os 
+
+
+def get_gaussian_noise_parameters(noise_level_img, k_index=0, degradation_mode='deblur'):
+    '''
+    Hyperparamers have been optimized for each algorithms at noise levels 0.01 0.03 and 0.05. For other noise levels, optimality is not guaranteed.
+    '''
+    if degradation_mode == 'deblur' :
+        if k_index == 8 :
+            lamb = 0.075
+        elif k_index == 9 :
+            lamb = 0.075
+        else :
+            lamb = 0.1 
+        sigma_k_denoiser = 1.8
+        thres_conv = 1e-5
+    if degradation_mode == 'SR' :
+        sigma_k_denoiser = 2.
+        thres_conv = 1e-6
+        lamb = 0.065
+    sigma_denoiser = sigma_k_denoiser*noise_level_img
+    maxitr = 400
+    return lamb, sigma_denoiser / 255., maxitr, thres_conv
+
+def create_out_dir(degradation_mode, dataset_name) : 
+    exp_out_path = degradation_mode
+    if not os.path.exists(exp_out_path):
+        os.mkdir(exp_out_path)
+    exp_out_path = os.path.join(exp_out_path, dataset_name)
+    if not os.path.exists(exp_out_path):
+        os.mkdir(exp_out_path)
+    return exp_out_path
+
 
 '''
 Copyright (c) 2020 Kai Zhang (cskaizhang@gmail.com)
 '''
-
-
-
 
 def imread_uint(path, n_channels=3):
     #  input: path
@@ -61,7 +91,7 @@ def array2tensor(img):
 
 def tensor2array(img):
     img = img.cpu()
-    img = img.squeeze().detach().numpy()
+    img = img.squeeze(0).detach().numpy()
     img = np.transpose(img, (1, 2, 0))
     return img
 
@@ -71,8 +101,14 @@ def tensor2uint(img):
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0).round())
 
+def rescale(img):
+    mintmp = img.min()
+    maxtmp = img.max()
+    img = (img - mintmp) / (maxtmp - mintmp)
+    return img
+
 def single2uint(img):
-    return np.uint8((img.clip(0, 1)*255.).round())
+    return np.uint8((img*255.).round())
 
 def imsave(img_path,img):
     img = np.squeeze(img)
@@ -89,10 +125,16 @@ def rgb2y(im):
 def psnr(img1,img2) :
     if not img1.shape == img2.shape:
         raise ValueError('Input images must have the same dimensions.')
-    img1 = np.float64(img1)
-    img2 = np.float64(img2)
+    # img1 = np.float64(img1)
+    # img2 = np.float64(img2)
     mse = np.mean((img1 - img2)**2)
     return 20 * np.log10(1. / np.sqrt(mse))
+
+def psnr_torch(img1,img2) :
+    if not img1.shape == img2.shape:
+        raise ValueError('Input images must have the same dimensions.')
+    mse = torch.mean((img1 - img2) ** 2)
+    return 20 * torch.log10( 1. / torch.sqrt(mse))
 
 def matlab_style_gauss2D(shape=(3,3),sigma=0.5):
     """
@@ -216,3 +258,5 @@ def get_DPIR_rho_sigma(sigma=2.55/255, iter_num=15, modelSigma1=49.0, modelSigma
     sigmas = (modelSigmaS*w+modelSigmaS_lin*(1-w))/255.
     rhos = list(map(lambda x: lamb*(sigma**2)/(x**2), sigmas))
     return rhos, sigmas
+
+

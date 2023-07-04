@@ -57,8 +57,6 @@ def denoise():
 
         # load image
         input_im_uint = imread_uint(input_paths[i])
-        if hparams.patch_size < min(input_im_uint.shape[0], input_im_uint.shape[1]):
-            input_im_uint = crop_center(input_im_uint, hparams.patch_size, hparams.patch_size)
         input_im = np.float32(input_im_uint / 255.)
         # Degrade image
         np.random.seed(seed=0)
@@ -66,14 +64,10 @@ def denoise():
         noise_im = input_im + noise
         noise_im_tensor = array2tensor(noise_im).to(PnP_module.device)
 
-        # Calculate grad
-        Ds, f = PnP_module.denoiser_model.calculate_grad(noise_im_tensor, hparams.noise_level_img / 255.)
-        Ds = Ds.detach()
-        f = f.detach()
         # Denoise
-        denoise_img_tensor = noise_im_tensor - PnP_module.denoiser_model.hparams.weight_Ds * Ds
+        Dx,g,Dg = PnP_module.denoise(noise_im_tensor, hparams.noise_level_img / 255)
 
-        denoise_img = tensor2array(denoise_img_tensor.cpu())
+        denoise_img = tensor2array(Dx.cpu())
         psnri = psnr(denoise_img, input_im)
 
         psnr_list.append(psnri)

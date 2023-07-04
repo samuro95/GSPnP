@@ -67,17 +67,15 @@ class GradMatch(pl.LightningModule):
         :param sigma: Denoiser level (std)
         :return: Dg(x), DRUNet output N(x)
         '''
-        x = x.float()
-        x = x.requires_grad_()
-
+        x = x.float().requires_grad_()
         if x.size(2) % 8 == 0 and x.size(3) % 8 == 0:
             N = self.student_grad.forward(x, sigma)
         else:
             current_model = lambda v: self.student_grad.forward(v, sigma)
             N = test_mode(current_model, x, mode=5, refield=64, min_size=256)
-        JN = torch.autograd.grad(N, x, grad_outputs=x - N, create_graph=True, only_inputs=True)[0]
-        Dg = x - N - JN
-        return Dg, N
+        g = 0.5 * torch.sum((x - N).reshape((x.shape[0], -1)) ** 2)
+        Dg = torch.autograd.grad(g, x, torch.ones_like(g), create_graph=True, only_inputs=True)[0]
+        return Dg, N, g
 
 
     def forward(self, x, sigma):
@@ -88,7 +86,7 @@ class GradMatch(pl.LightningModule):
         :return: Denoised image x_hat, Dg(x) gradient of the regularizer g at x
         '''
         if self.hparams.grad_matching: # If gradient step denoising
-            Dg, f = self.calculate_grad(x, sigma)
+            Dg, N, g = self.calculate_grad(x, sigma)
             x_hat = x - self.hparams.weight_Ds * Dg
             return x_hat, Dg
         else: # If denoising with standard forward CNN

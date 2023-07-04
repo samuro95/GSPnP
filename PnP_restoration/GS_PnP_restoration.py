@@ -36,9 +36,24 @@ class PnP_restoration():
         for i, v in self.denoiser_model.named_parameters():
             v.requires_grad = False
         self.denoiser_model = self.denoiser_model.to(self.device)
-        if self.hparams.precision == 'double' :
-            if self.denoiser_model is not None:
-                self.denoiser_model.double()
+
+    def denoise(self, x, sigma, weight=1.):
+        if self.hparams.rescale_for_denoising:
+            mintmp = x.min()
+            maxtmp = x.max()
+            x = (x - mintmp) / (maxtmp - mintmp)
+        elif self.hparams.clip_for_denoising:
+            x = torch.clamp(x,0,1)
+        torch.set_grad_enabled(True)
+        Dg, N, g = self.denoiser_model.calculate_grad(x, sigma)
+        torch.set_grad_enabled(False)
+        Dg = Dg.detach()
+        N = N.detach()
+        if self.hparams.rescale_for_denoising:
+            N = N * (maxtmp - mintmp) + mintmp
+        Dx = x - weight * Dg
+        return Dx, g, Dg
+
 
     def initialize_prox(self, img, degradation):
         '''
@@ -46,63 +61,48 @@ class PnP_restoration():
         :param img: degraded image
         :param degradation: 2D blur kernel for deblurring and SR, mask for inpainting
         '''
-        if self.hparams.degradation_mode == 'deblurring':
-            self.k = degradation
-            self.k_tensor = array2tensor(np.expand_dims(self.k, 2)).double().to(self.device)
-            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate_prox(img, self.k_tensor, 1)
-        elif self.hparams.degradation_mode == 'SR':
-            self.k = degradation
-            self.k_tensor = array2tensor(np.expand_dims(self.k, 2)).double().to(self.device)
-            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate_prox(img, self.k_tensor, self.hparams.sf)
+        if self.hparams.degradation_mode == 'deblurring' or self.hparams.degradation_mode == 'SR':
+            k = degradation
+            self.k_tensor = torch.tensor(k).to(self.device)
+            self.FB, self.FBC, self.F2B, self.FBFy = utils_sr.pre_calculate_prox(img, self.k_tensor, self.sf)
         elif self.hparams.degradation_mode == 'inpainting':
-            self.M = array2tensor(degradation).double().to(self.device)
-            self.My = self.M*img
-        else:
-            print('degradation mode not treated')
+            self.M = array2tensor(degradation).to(self.device)
 
-    def calculate_prox(self, img):
+    def data_fidelity_prox_step(self, x, y, stepsize):
         '''
-        Calculation of the proximal mapping of the data term f
-        :param img: input for the prox
-        :return: prox_f(img)
+        Calculation of the proximal step on the data-fidelity term f
         '''
-        if self.hparams.degradation_mode == 'deblurring':
-            rho = torch.tensor([1/self.tau]).double().repeat(1, 1, 1, 1).to(self.device)
-            px = utils_sr.prox_solution_L2(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, 1)
-        elif self.hparams.degradation_mode == 'SR':
-            rho = torch.tensor([1 / self.tau]).double().repeat(1, 1, 1, 1).to(self.device)
-            px = utils_sr.prox_solution_L2(img.double(), self.FB, self.FBC, self.F2B, self.FBFy, rho, self.hparams.sf)
-        elif self.hparams.degradation_mode == 'inpainting':
-            if self.hparams.noise_level_img > 1e-2:
-                px = (self.tau*self.My + img)/(self.tau*self.M+1)
-            else :
-                px = self.My + (1-self.M)*img
-        else:
-            print('degradation mode not treated')
+        if self.hparams.noise_model == 'gaussian':
+            if self.hparams.degradation_mode == 'deblurring' or self.hparams.degradation_mode == 'SR':
+                px = utils_sr.prox_solution_L2(x, self.FB, self.FBC, self.F2B, self.FBFy, stepsize, self.sf)
+            elif self.hparams.degradation_mode == 'inpainting':
+                if self.hparams.noise_level_img > 1e-2:
+                    px = (stepsize*self.M*y + x)/(stepsize*self.M+1)
+                else :
+                    px = self.M*y + (1-self.M)*x
+            else:
+                ValueError('Degradation not treated')
+        else :  
+            ValueError('noise model not treated')
         return px
 
-    # def calculate_F(self,x,s,img):
-    #     '''
-    #     Calculation of the objective function value f + lamb*s
-    #     :param x: Point where to evaluate F
-    #     :param s: Precomputed regularization function value
-    #     :param img: Degraded image
-    #     :return: F(x)
-    #     '''
-    #     if self.hparams.degradation_mode == 'deblurring':
-    #         deg_x = utils_sr.imfilter(x.double(),self.k_tensor[0].double().flip(1).flip(2).expand(3,-1,-1,-1))
-    #         F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
-    #     elif self.hparams.degradation_mode == 'SR':
-    #         deg_x = utils_sr.imfilter(x.double(), self.k_tensor[0].double().flip(1).flip(2).expand(3, -1, -1, -1))
-    #         deg_x = deg_x[...,0::self.hparams.sf, 0::self.hparams.sf]
-    #         F = 0.5 * torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
-    #     elif self.hparams.degradation_mode == 'inpainting':
-    #         deg_x = self.M*x.double()
-    #         F = 0.5*torch.norm(img - deg_x, p=2) ** 2 + self.hparams.lamb * s
-    #     else :
-    #         print('degradation not implemented')
-    #     return F.item()
+    def data_fidelity_grad(self, x, y):
+        if self.hparams.noise_model == 'gaussian':
+            return utils_sr.grad_solution_L2(x, y, self.k_tensor, self.sf)
+        else:
+            raise ValueError('noise model not implemented')   
 
+    def data_fidelity_grad_step(self, x, y, stepsize):
+        '''
+        Calculation of the gradient step on the data-fidelity term f
+        '''
+        if self.hparams.noise_model == 'gaussian':
+            grad = utils_sr.grad_solution_L2(x, y, self.k_tensor, self.sf)
+        else:
+            raise ValueError('noise model not implemented')
+        return x - stepsize*grad, grad
+
+        
     def A(self,y):
         '''
         Calculation A*x with A the linear degradation operator 
@@ -144,38 +144,58 @@ class PnP_restoration():
             f = 0.5 * torch.norm(img - deg_y, p=2) ** 2
         elif self.hparams.noise_model == 'poisson':
             f = (img*torch.log(img/deg_y + 1e-15) + deg_y - img).sum()
-        else:
-            raise ValueError('noise model not implemented')
         return f
 
-
-    def calculate_F(self,y,s,img):
+    def calculate_regul(self,x, g=None):
         '''
-        Calculation of the objective function value f + lamb*s
-        :param y: Point where to evaluate F
-        :param s: Precomputed regularization function value
+        Calculation of the regularization phi_sigma(y)
+        :param x: Point where to evaluate
+        :param g: Precomputed regularization function value at x
+        :return: regul(x)
+        '''
+        if g is None:
+            _,g,_ = self.denoise(x, self.sigma_denoiser)
+        return g
+
+
+    def calculate_F(self,x, img, g = None):
+        '''
+        Calculation of the objective function value f(x) + lamb*g(x)
+        :param x: Point where to evaluate F
         :param img: Degraded image
-        :return: F(y)
+        :param g: Precomputed regularization function value at x
+        :return: F(x)
         '''
-        f = self.calulate_data_term(y,img)
-        F = f + self.hparams.lamb * s
-        return F.item()
+        regul = self.calculate_regul(x, g=g)
+        if self.hparams.no_data_term:
+            F = regul
+            f = torch.zeros_like(F)
+        else:
+            f = self.calulate_data_term(x,img)
+            F = f + self.hparams.lamb * regul
+        return f.item(), F.item()
 
-    def restore(self, img, clean_img, degradation,extract_results=False):
+    def restore(self, img, init_im, clean_img, degradation, extract_results=False, sf=1):
         '''
         Compute GS-PnP restoration algorithm
         :param img: Degraded image
+        :param init_im: Initialization of the algorithm
         :param clean_img: ground-truth clean image
         :param degradation: 2D blur kernel for deblurring and SR, mask for inpainting
         :param extract_results: Extract information for subsequent image or curve saving
+        :param sf: Super-resolution factor
         '''
 
+        self.sf = sf
+
         if extract_results:
-            z_list, x_list, Dx_list, psnr_tab, s_list, Ds_list, F_list = [], [], [], [], [], [], []
+            y_list, z_list, x_list, Dg_list, psnr_tab, g_list, f_list, Df_list, F_list, Psi_list = [], [], [], [], [], [], [], [], [], []
+
+        i = 0 # iteration counter
 
         # initalize parameters
-        if self.hparams.tau is not None:
-            self.tau = self.hparams.tau
+        if self.hparams.stepsize is not None:
+            self.tau = self.hparams.stepsize
         else:
             self.tau = 1 / self.hparams.lamb
 
@@ -185,13 +205,13 @@ class PnP_restoration():
         self.initialize_prox(img_tensor, degradation) # prox calculus that can be done outside of the loop
 
         # Initialization of the algorithm
-        if self.hparams.degradation_mode == 'SR' :
-            x0 = cv2.resize(img, (img.shape[1] * self.hparams.sf, img.shape[0] * self.hparams.sf),interpolation=cv2.INTER_CUBIC)
-            x0 = utils_sr.shift_pixel(x0, self.hparams.sf)
-            x0 = array2tensor(x0).to(self.device)
-        else:
-            x0 = img_tensor
-        x0 = self.calculate_prox(x0)
+        x0 = array2tensor(init_im).to(self.device)
+        if self.hparams.use_linear_init : 
+            x0 = self.At(x0)
+        if self.hparams.use_hard_constraint:
+            x0 = torch.clamp(x0, 0, 1)
+        x0 = self.data_fidelity_prox_step(x0, img_tensor, self.tau)
+        x = x0
 
         if extract_results:  # extract np images and PSNR values
             out_x = tensor2array(x0.cpu())
@@ -204,236 +224,233 @@ class PnP_restoration():
         x = x0
 
         diff_F = 1
-        F_old = 1
-        self.relative_diff_F_min = self.hparams.relative_diff_F_min
+        F = 1 
+        self.backtracking_check = True
 
-        while i < self.hparams.maxitr and abs(diff_F)/F_old > self.relative_diff_F_min:
+        while i < self.hparams.maxitr:
 
-            if self.hparams.inpainting_init :
-                if i < self.hparams.n_init:
-                    self.sigma_denoiser = 50
-                    self.relative_diff_F_min = 0
-                else :
-                    self.sigma_denoiser = self.hparams.sigma_denoiser
-                    self.relative_diff_F_min = self.hparams.relative_diff_F_min
+            F_old = F
+            x_old = x
+            
+            # The 50 first steps are special for inpainting
+            if self.hparams.inpainting_init and i < self.hparams.n_init:
+                self.sigma_denoiser = 50
+                use_backtracking = False
+                early_stopping = False
             else :
                 self.sigma_denoiser = self.hparams.sigma_denoiser
-
+                use_backtracking = self.hparams.use_backtracking
+                early_stopping = self.hparams.early_stopping
+                
             x_old = x
 
-            #Denoising of x_old and calculation of F_old
-            Ds, f = self.denoiser_model.calculate_grad(x_old, self.sigma_denoiser / 255.)
-            Ds = Ds.detach()
-            f = f.detach()
-            Dx = x_old - self.denoiser_model.hparams.weight_Ds * Ds
-            s_old = 0.5 * (torch.norm(x_old.double() - f.double(), p=2) ** 2)
-            F_old = self.calculate_F(x_old, s_old, img_tensor)
+            # Gradient of the regularization term
+            _,g,Dg = self.denoise(x_old, self.sigma_denoiser)
+            # Gradient step
+            z = x_old - self.tau * self.hparams.lamb * Dg
+            # Proximal step
+            x = self.data_fidelity_prox_step(z, img_tensor, self.tau)
+            y = z # output image is the output of the denoising step
+            # Hard constraint
+            if self.hparams.use_hard_constraint:
+                x = torch.clamp(x,0,1)
+            # Calculate Objective
+            f, F = self.calculate_F(x_old, img_tensor, g=g)
 
-            backtracking_check = False
+            # Backtracking
+            if i>1 and use_backtracking :
+                diff_x = (torch.norm(x - x_old, p=2) ** 2)
+                diff_F = F_old - F
+                if diff_F < (self.hparams.gamma_backtracking / self.tau) * diff_x :
+                    self.tau = self.hparams.eta_backtracking * self.tau
+                    self.backtracking_check = False
+                    print('backtracking : tau =', self.tau, 'diff_F=', diff_F)
+                else : 
+                    self.backtracking_check = True
 
-            while not backtracking_check:
+            if self.backtracking_check : # if the backtracking condition is satisfied
+                # Logging
+                if extract_results:
+                    out_z = tensor2array(z.cpu())
+                    out_x = tensor2array(x.cpu())
+                    current_z_psnr = psnr(clean_img, out_z)
+                    current_x_psnr = psnr(clean_img, out_x)
+                    if self.hparams.print_each_step:
+                        print('iteration : ', i)
+                        print('current z PSNR : ', current_z_psnr)
+                        print('current x PSNR : ', current_x_psnr)
+                    x_list.append(out_x)
+                    z_list.append(out_z)
+                    g_list.append(g.cpu().item())
+                    Dg_list.append(torch.norm(Dg).cpu().item())
+                    psnr_tab.append(current_x_psnr)
+                    F_list.append(F)
+                    f_list.append(f)
+                
+                # check decrease of data_fidelity 
+                if early_stopping : 
+                    if self.hparams.crit_conv == 'cost':
+                        if abs(diff_F)/abs(F) < self.hparams.thres_conv:
+                            print(f'Convergence reached at iteration {i}')
+                            break
+                    elif self.hparams.crit_conv == 'residual':
+                        diff_x = torch.norm(x - x_old, p=2)
+                        if diff_x/torch.norm(x) < self.hparams.thres_conv:
+                            print(f'Convergence reached at iteration {i}')
+                            break
 
-                # Gradient step
-                z = (1 - self.hparams.lamb * self.tau) * x_old + self.hparams.lamb * self.tau * Dx
+                i += 1 # next iteration
 
-                # Proximal step
-                x = self.calculate_prox(z)
+            else : # if the backtracking condition is not satisfied
+                x = x_old
+                F = F_old
 
-                # Calculation of Fnew
-                f = self.denoiser_model.calculate_grad(x, self.sigma_denoiser / 255.)[1]
-                f = f.detach()
-                s = 0.5 * (torch.norm(x.double() - f.double(), p=2) ** 2)
-                F_new = self.calculate_F(x,s,img_tensor)
-
-                # Backtracking
-                diff_x = (torch.norm(x - x_old, p=2) ** 2).item()
-                diff_F = F_old - F_new
-                if self.hparams.degradation_mode == 'inpainting':
-                    diff_F = 1
-                    F_old = 1
-                if self.hparams.use_backtracking and diff_F < (self.hparams.gamma / self.tau) * diff_x and abs(diff_F)/F_old > self.relative_diff_F_min:
-                    backtracking_check = False
-                    self.tau = self.hparams.eta_tau * self.tau
-                    x = x_old
-                else:
-                    backtracking_check = True
-
-            # Logging
-            if extract_results:
-                out_z = tensor2array(z.cpu())
-                out_x = tensor2array(x.cpu())
-                current_z_psnr = psnr(clean_img, out_z)
-                current_x_psnr = psnr(clean_img, out_x)
-                if self.hparams.print_each_step:
-                    print('iteration : ', i)
-                    print('current z PSNR : ', current_z_psnr)
-                    print('current x PSNR : ', current_x_psnr)
-                x_list.append(out_x)
-                z_list.append(out_z)
-                Dx_list.append(tensor2array(Dx.cpu()))
-                Ds_list.append(torch.norm(Ds).cpu().item())
-                s_list.append(s.cpu().item())
-                F_list.append(F_new)
-                psnr_tab.append(current_x_psnr)
-
-            i += 1 # next iteration
-
-        # post-processing gradient step
-        if extract_results:
-            Ds, f = self.denoiser_model.calculate_grad(x, self.sigma_denoiser / 255.)
-            Ds = Ds.detach()
-            f = f.detach()
-            Dx = x - self.denoiser_model.hparams.weight_Ds * Ds.detach()
-            s = 0.5 * (torch.norm(x.double() - f.double(), p=2) ** 2)
-        else:
-            Ds, _ = self.denoiser_model.calculate_grad(x, self.sigma_denoiser / 255.)
-            Ds = Ds.detach()
-            Dx = x - self.denoiser_model.hparams.weight_Ds * Ds
-
-        z = (1 - self.hparams.lamb * self.tau) * x + self.hparams.lamb * self.tau * Dx
-
-        if self.hparams.degradation_mode == 'inpainting':
-            output_img = tensor2array(x.cpu())
-        else :
-            output_img = tensor2array(z.cpu())
-
+        output_img = tensor2array(y.cpu())
         output_psnr = psnr(clean_img, output_img)
-        output_psnrY = psnr(rgb2y(clean_img), rgb2y(output_img))
 
         if extract_results:
-            if self.hparams.print_each_step:
-                print('current z PSNR : ', output_psnr)
-            z_list.append(tensor2array(z.cpu()))
-            Dx_list.append(tensor2array(Dx.cpu()))
-            Ds_list.append(torch.norm(Ds).cpu().item())
-            s_list.append(s.cpu().item())
-            return output_img, output_psnr, output_psnrY, np.array(x_list), np.array(z_list), np.array(Dx_list), np.array(psnr_tab), np.array(Ds_list), np.array(s_list), np.array(F_list)
+            return output_img, tensor2array(x0.cpu()), output_psnr, i, x_list, z_list, np.array(Dg_list), np.array(psnr_tab), np.array(g_list), np.array(F_list), np.array(f_list)
         else:
-            return output_img, output_psnr, output_psnrY
+            return output_img, tensor2array(x0.cpu()), output_psnr, i
+
+
 
     def initialize_curves(self):
 
-        self.rprox = []
-        self.prox = []
         self.conv = []
+        self.conv_F = []
+        self.PSNR = []
+        self.g = []
+        self.Dg = []
+        self.F = []
+        self.f = []
         self.lip_algo = []
         self.lip_D = []
-        self.PSNR = []
-        self.s = []
-        self.Ds = []
-        self.F = []
+        self.lip_Dg = []
 
-    def update_curves(self, x_list, z_list, Dx_list, psnr_tab, Ds_list, s_list, F_list):
+    def update_curves(self, x_list, psnr_tab, Dg_list, g_list, F_list, f_list):
 
-        prox_list = x_list
         self.F.append(F_list)
-        self.s.append(s_list)
-        self.Ds.append(Ds_list)
-        self.prox.append(np.sqrt(np.array([np.sum(np.abs(prox_list[i + 1] - prox_list[i]) ** 2) for i in range(len(x_list[:-1]))]) / np.array([np.sum(np.abs(z_list[i + 1] - z_list[i]) ** 2) for i in range(len(z_list[:-1]))])))
-        rprox_list = 2 * prox_list - z_list
-        self.rprox.append(np.sqrt(np.array([np.sum(np.abs(rprox_list[i + 1] - rprox_list[i]) ** 2) for i in range(len(rprox_list[:-1]))]) / np.array([np.sum(np.abs(z_list[i + 1] - z_list[i]) ** 2) for i in range(len(rprox_list[:-1]))])))
-        self.conv.append(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(len(x_list) - 1)]) / np.sum(np.abs(x_list[0]) ** 2))
-        self.lip_algo.append(np.sqrt(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(1, len(x_list) - 1)]) / np.array([np.sum(np.abs(x_list[k] - x_list[k - 1]) ** 2) for k in range(1, len(x_list[:-1]))])))
-        self.lip_D.append(np.sqrt(np.array([np.sum(np.abs(Dx_list[i + 1] - Dx_list[i]) ** 2) for i in range(len(Dx_list) - 1)]) / np.array([np.sum(np.abs(x_list[i + 1] - x_list[i]) ** 2) for i in range(len(x_list) - 1)])))
+        self.f.append(f_list)
+        self.g.append(g_list)
+        self.Dg.append(Dg_list)
         self.PSNR.append(psnr_tab)
+        self.conv.append(np.array([(np.linalg.norm(x_list[k + 1] - x_list[k]) ** 2) for k in range(len(x_list) - 1)]) / np.sum(np.abs(x_list[0]) ** 2))
+        self.lip_algo.append(np.sqrt(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(1, len(x_list) - 1)]) / np.array([np.sum(np.abs(x_list[k] - x_list[k - 1]) ** 2) for k in range(1, len(x_list[:-1]))])))
 
     def save_curves(self, save_path):
 
         import matplotlib
-        matplotlib.rcParams.update({'font.size': 15})
+        matplotlib.rcParams.update({'font.size': 17})
+        matplotlib.rcParams['lines.linewidth'] = 2
+        matplotlib.style.use('seaborn-darkgrid')
+        use_tex = matplotlib.checkdep_usetex(True)
+        if use_tex:
+            plt.rcParams['text.usetex'] = True
+
+        plt.figure(0)
+        fig, ax = plt.subplots()
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        for i in range(len(self.g)):
+            plt.plot(self.g[i], '-o')
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.savefig(os.path.join(save_path, 'g.png'),bbox_inches="tight")
 
         plt.figure(1)
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         for i in range(len(self.PSNR)):
-            plt.plot(self.PSNR[i], '*', label='im_' + str(i))
-        plt.legend()
-        plt.grid()
-        plt.savefig(os.path.join(save_path, 'PSNR.png'))
+            plt.plot(self.PSNR[i], '-o')
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.savefig(os.path.join(save_path, 'PSNR.png'),bbox_inches="tight")
 
         plt.figure(2)
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         for i in range(len(self.F)):
-            plt.plot(self.F[i], '-o', markersize=10)
+            plt.plot(self.F[i], '-o')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.savefig(os.path.join(save_path, 'F.png'))
+        plt.savefig(os.path.join(save_path, 'F.png'), bbox_inches="tight")
 
         plt.figure(3)
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
-        for i in range(len(self.conv)):
-            plt.plot(self.conv[i], '-o', markersize=10)
-            plt.semilogy()
+        for i in range(len(self.F)):
+            plt.plot(self.f[i], '-o')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.savefig(os.path.join(save_path, 'conv_log.png'), bbox_inches="tight")
+        plt.savefig(os.path.join(save_path, 'f.png'), bbox_inches="tight")
 
-        self.conv2 = [[np.min(self.conv[i][:k]) for k in range(1, len(self.conv[i]))] for i in range(len(self.conv))]
-        conv_rate = [self.conv2[i][0]*np.array([(1/k) for k in range(1,len(self.conv2[i]))]) for i in range(len(self.conv2))]
-
-        plt.figure(4)
-        fig, ax = plt.subplots()
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        for i in range(len(self.conv2)):
-            plt.plot(self.conv2[i], '-o', markersize=10, label='GS-PnP')
-            plt.plot(conv_rate[i], '--', color='red', label=r'$\mathcal{O}(\frac{1}{K})$')
-            plt.semilogy()
-        plt.legend()
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.savefig(os.path.join(save_path, 'conv_log2.png'), bbox_inches="tight")
-
+        # conv_DPIR = np.load('conv_DPIR2.npy')
+        conv_rate = self.conv[0][0]*np.array([(1/k) for k in range(1,len(self.conv[0]))])
         plt.figure(5)
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
-        for i in range(len(self.lip_algo)):
-            plt.plot(self.lip_algo[i], '-o', label='im_' + str(i))
+        for i in range(len(self.conv)):
+            plt.plot(self.conv[i],'-o')
+            # plt.plot(conv_DPIR[:self.hparams.maxitr], marker=marker_list[-1], markevery=10, label='DPIR')
+        plt.plot(conv_rate, '--', color='red', label=r'$\mathcal{O}(\frac{1}{K})$')
+        plt.semilogy()
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.grid()
-        plt.savefig(os.path.join(save_path, 'lip_algo.png'))
+        plt.savefig(os.path.join(save_path, 'conv_log.png'), bbox_inches="tight")
 
         plt.figure(6)
-        for i in range(len(self.lip_D)):
-            plt.plot(self.lip_D[i], '-o', label='im_' + str(i))
+        fig, ax = plt.subplots()
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        for i in range(len(self.lip_algo)):
+            plt.plot(self.lip_algo[i],'-o')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        plt.grid()
-        plt.savefig(os.path.join(save_path, 'lip_D.png'))
+        plt.savefig(os.path.join(save_path, 'lip_algo.png'))
 
 
     def add_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--denoiser_name', type=str, default='GS-DRUNet')
         parser.add_argument('--dataset_path', type=str, default='../datasets')
         parser.add_argument('--pretrained_checkpoint', type=str,default='../GS_denoising/ckpts/GSDRUNet.ckpt')
-        parser.add_argument('--PnP_algo', type=str, default='HQS')
-        parser.add_argument('--dataset_name', type=str, default='CBSD10')
+        parser.add_argument('--noise_model', type=str,  default='gaussian')
+        parser.add_argument('--dataset_name', type=str, default='set3c')
+        parser.add_argument('--noise_level_img', type=float, required=True)
+        parser.add_argument('--maxitr', type=int, default=1000)
+        parser.add_argument('--stepsize', type=float)
+        parser.add_argument('--lamb', type=float)
         parser.add_argument('--sigma_denoiser', type=float)
-        parser.add_argument('--noise_model', type=str, default='gaussian')
-        parser.add_argument('--noise_level_img', type=float, default=2.55)
-        parser.add_argument('--maxitr', type=int, default=400)
-        parser.add_argument('--lamb', type=float, default=0.1)
-        parser.add_argument('--tau', type=float)
         parser.add_argument('--n_images', type=int, default=68)
-        parser.add_argument('--weight_Ds', type=float, default=1.)
-        parser.add_argument('--eta_tau', type=float, default=0.9)
-        parser.add_argument('--gamma', type=float, default=0.1)
-        parser.add_argument('--no_use_backtracking', dest='use_backtracking', action='store_false')
+        parser.add_argument('--crit_conv', type=str, default='cost')
+        parser.add_argument('--thres_conv', type=float, default=1e-7)
+        parser.add_argument('--no_backtracking', dest='use_backtracking', action='store_false')
         parser.set_defaults(use_backtracking=True)
-        parser.add_argument('--relative_diff_F_min', type=float, default=1e-6)
+        parser.add_argument('--eta_backtracking', type=float, default=0.9)
+        parser.add_argument('--gamma_backtracking', type=float, default=0.1)
         parser.add_argument('--inpainting_init', dest='inpainting_init', action='store_true')
         parser.set_defaults(inpainting_init=False)
-        parser.add_argument('--precision', type=str, default='simple')
-        parser.add_argument('--n_init', type=int, default=10)
-        parser.add_argument('--patch_size', type=int, default=256)
         parser.add_argument('--extract_curves', dest='extract_curves', action='store_true')
         parser.set_defaults(extract_curves=False)
-        parser.add_argument('--no_extract_images', dest='extract_images', action='store_false')
-        parser.set_defaults(extract_images=True)
+        parser.add_argument('--extract_images', dest='extract_images', action='store_true')
+        parser.set_defaults(extract_images=False)
         parser.add_argument('--print_each_step', dest='print_each_step', action='store_true')
         parser.set_defaults(print_each_step=False)
+        parser.add_argument('--no_data_term', dest='no_data_term', action='store_true')
+        parser.set_defaults(no_data_term=False)
+        parser.add_argument('--use_hard_constraint', dest='use_hard_constraint', action='store_true')
+        parser.set_defaults(use_hard_constraint=False)
+        parser.add_argument('--rescale_for_denoising', dest='rescale_for_denoising', action='store_true')
+        parser.set_defaults(rescale_for_denoising=False)
+        parser.add_argument('--clip_for_denoising', dest='clip_for_denoising', action='store_true')
+        parser.set_defaults(clip_for_denoising=False)
+        parser.add_argument('--use_wandb', dest='use_wandb', action='store_true')
+        parser.set_defaults(use_wandb=False)
+        parser.add_argument('--use_linear_init', dest='use_linear_init', action='store_true')
+        parser.set_defaults(use_linear_init=False)
+        parser.add_argument('--grayscale', dest='grayscale', action='store_true')
+        parser.set_defaults(grayscale=False)
+        parser.add_argument('--no_early_stopping', dest='early_stopping', action='store_false')
+        parser.set_defaults(early_stopping=True)
+        parser.add_argument('--weight_Dg', type=float, default=1.)
+        parser.add_argument('--n_init', type=int, default=10)
         parser.add_argument('--act_mode_denoiser', type=str, default='E')
         return parser
