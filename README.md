@@ -23,7 +23,7 @@ The code relative to the Gradient Step Denoiser can be found in the ```GS_denois
 
 ### Training 
 
-- Download training dataset from https://drive.google.com/file/d/1WVTgEBZgYyHNa2iVLUYwcrGWZ4LcN4--/view?usp=sharing and unzip ```DRUNET``` in the ```datasets``` folder
+- Download training dataset from https://plmbox.math.cnrs.fr/f/4f56db2f0f7d49a88663/?dl=1 and unzip ```DRUNET``` in the ```datasets``` folder
 - Realize training
 ```
 cd GS_denoising
