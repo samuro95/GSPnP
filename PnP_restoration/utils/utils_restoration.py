@@ -16,7 +16,7 @@ def get_gaussian_noise_parameters(noise_level_img, k_index=0, degradation_mode='
         elif k_index == 9 :
             lamb = 0.075
         else :
-            lamb = 0.1 
+            lamb = 0.1
         sigma_k_denoiser = 1.8
         thres_conv = 1e-5
     if degradation_mode == 'SR' :

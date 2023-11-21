@@ -36,6 +36,7 @@ def SR():
         input_paths = os_sorted([os.path.join(input_path,p) for p in os.listdir(input_path)])
 
     psnr_list = []
+    ssim_list = []
     F_list = []
 
     if hparams.kernel_path is not None : # if a specific kernel saved in hparams.kernel_path as np array is given 
@@ -67,6 +68,7 @@ def SR():
     for k_index in k_index_list : # For each kernel
 
         psnr_k_list = []
+        ssim_k_list = []
         n_it_list = []
 
         k = k_list[k_index]
@@ -106,20 +108,22 @@ def SR():
 
                 # PnP restoration
                 if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
-                    deblur_im, init_im, output_psnr, n_it, x_list, z_list, Dg_list, psnr_tab, g_list, F_list, f_list = PnP_module.restore(blur_im.copy(),init_im.copy(),input_im.copy(),k, extract_results=True, sf=sf)
+                    deblur_im, init_im, output_psnr, output_ssim, n_it, x_list, z_list, Dg_list, psnr_tab, ssim_tab, g_list, F_list, f_list = PnP_module.restore(blur_im.copy(),init_im.copy(),input_im.copy(),k, extract_results=True, sf=sf)
                 else :
-                    deblur_im, init_im, output_psnr, n_it = PnP_module.restore(blur_im,init_im,input_im,k, sf=sf)
+                    deblur_im, init_im, output_psnr, output_ssim, n_it = PnP_module.restore(blur_im,init_im,input_im,k, sf=sf)
 
                 print('PSNR: {:.2f}dB'.format(output_psnr))
                 print(f'N iterations: {n_it}')
                 
                 psnr_k_list.append(output_psnr)
+                ssim_k_list.append(output_ssim)
                 psnr_list.append(output_psnr)
+                ssim_list.append(output_ssim)
                 n_it_list.append(n_it)
 
                 if hparams.extract_curves:
                     # Create curves
-                    PnP_module.update_curves(x_list, psnr_tab, Dg_list, g_list, F_list, f_list)
+                    PnP_module.update_curves(x_list, psnr_tab, ssim_tab, Dg_list, g_list, F_list, f_list)
 
                 if hparams.extract_images:
                     # Save images
@@ -141,7 +145,9 @@ def SR():
                 print('output curves saved at ', save_curves_path)
 
         avg_k_psnr = np.mean(np.array(psnr_k_list))
+        avg_k_ssim = np.mean(np.array(ssim_k_list))
         print('avg RGB psnr on kernel {} : {:.2f}dB'.format(k_index, avg_k_psnr))
+        print('avg RGB ssim on kernel {} : {:.2f}'.format(k_index, avg_k_ssim))
         data.append([k_index, sf, np.mean(np.mean(n_it_list))])
 
     data = np.array(data)

@@ -34,13 +34,7 @@ def denoise():
         den_out_path = 'denoise'
         if not os.path.exists(den_out_path):
             os.mkdir(den_out_path)
-        den_out_path = os.path.join('denoise', hparams.denoiser_name)
-        if not os.path.exists(den_out_path):
-            os.mkdir(den_out_path)
-        exp_out_path = os.path.join(den_out_path, hparams.PnP_algo)
-        if not os.path.exists(exp_out_path):
-            os.mkdir(exp_out_path)
-        exp_out_path = os.path.join(exp_out_path, hparams.dataset_name)
+        exp_out_path = os.path.join(den_out_path, hparams.dataset_name)
         if not os.path.exists(exp_out_path):
             os.mkdir(exp_out_path)
         exp_out_path = os.path.join(exp_out_path, str(hparams.noise_level_img))

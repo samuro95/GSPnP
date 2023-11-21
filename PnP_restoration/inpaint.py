@@ -23,6 +23,7 @@ def inpaint():
     hparams.maxitr = 100
     hparams.use_backtracking = False
     hparams.inpainting_init = True
+    hparams.lamb = 0.1
 
     # PnP_restoration class
     PnP_module = PnP_restoration(hparams)
@@ -39,13 +40,7 @@ def inpaint():
     den_out_path = 'inpaint'
     if not os.path.exists(den_out_path):
         os.mkdir(den_out_path)
-    den_out_path = os.path.join('inpaint', hparams.denoiser_name)
-    if not os.path.exists(den_out_path):
-        os.mkdir(den_out_path)
-    exp_out_path = os.path.join(den_out_path, hparams.PnP_algo)
-    if not os.path.exists(exp_out_path):
-        os.mkdir(exp_out_path)
-    exp_out_path = os.path.join(exp_out_path, hparams.dataset_name)
+    exp_out_path = os.path.join(den_out_path, hparams.dataset_name)
     if not os.path.exists(exp_out_path):
         os.mkdir(exp_out_path)
     exp_out_path = os.path.join(exp_out_path, str(hparams.noise_level_img))
@@ -71,8 +66,8 @@ def inpaint():
 
         # load image
         input_im_uint = imread_uint(input_paths[i])
-        if hparams.patch_size < min(input_im_uint.shape[0], input_im_uint.shape[1]):
-            input_im_uint = crop_center(input_im_uint, hparams.patch_size, hparams.patch_size)
+        # if hparams.patch_size < min(input_im_uint.shape[0], input_im_uint.shape[1]):
+        #     input_im_uint = crop_center(input_im_uint, hparams.patch_size, hparams.patch_size)
         input_im = np.float32(input_im_uint / 255.)
         # Degrade image
         mask = np.random.binomial(n=1, p=hparams.prop_mask, size=(input_im.shape[0],input_im.shape[1]))
@@ -84,17 +79,17 @@ def inpaint():
 
         # PnP restoration
         if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
-            inpainted_im, output_psnr, output_psnrY, x_list, z_list, Dx_list, psnr_tab, Ds_list, s_list, F_list = PnP_module.restore(mask_im, input_im, mask, extract_results=True)
+            inpainted_im, _, output_psnr, output_ssim, _, x_list, z_list, Dx_list, psnr_tab, ssim_tab, Ds_list, s_list, F_list = PnP_module.restore(mask_im, mask_im, input_im, mask, extract_results=True)
         else:
             inpainted_im, output_psnr, output_psnrY = PnP_module.restore(mask_im, input_im, mask)
 
         print('PSNR: {:.2f}dB'.format(output_psnr))
         psnr_list.append(output_psnr)
-        psnrY_list.append(output_psnrY)
+        # psnrY_list.append(output_psnrY)
 
         if hparams.extract_curves:
             # Create curves
-            PnP_module.update_curves(x_list, z_list, Dx_list, psnr_tab, Ds_list, s_list, F_list)
+            PnP_module.update_curves(x_list, z_list, psnr_tab, ssim_tab, Dx_list, Ds_list, s_list, F_list)
 
         if hparams.extract_images:
             # Save images
@@ -118,8 +113,8 @@ def inpaint():
 
     avg_k_psnr = np.mean(np.array(psnr_list))
     print('avg RGB psnr : {:.2f}dB'.format(avg_k_psnr))
-    avg_k_psnrY = np.mean(np.array(psnrY_list))
-    print('avg Y psnr : {:.2f}dB'.format(avg_k_psnrY))
+    # avg_k_psnrY = np.mean(np.array(psnrY_list))
+    # print('avg Y psnr : {:.2f}dB'.format(avg_k_psnrY))
 
 
 if __name__ == '__main__' :
