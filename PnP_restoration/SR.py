@@ -131,10 +131,10 @@ def SR():
                     if not os.path.exists(save_im_path):
                         os.mkdir(save_im_path)
                     imsave(os.path.join(save_im_path, 'img_'+str(i)+'_input.png'), input_im_uint)
-                    imsave(os.path.join(save_im_path, 'img_' + str(i) + '_deblur.png'), single2uint(rescale(deblur_im)))
-                    imsave(os.path.join(save_im_path, 'img_'+str(i)+'_blur.png'), single2uint(rescale(blur_im)))
+                    imsave(os.path.join(save_im_path, 'img_' + str(i) + '_high_resolution.png'), single2uint(rescale(deblur_im)))
+                    imsave(os.path.join(save_im_path, 'img_'+str(i)+'_low_resolution.png'), single2uint(rescale(blur_im)))
                     imsave(os.path.join(save_im_path, 'img_' + str(i) + '_init.png'), single2uint(rescale(init_im)))
-                    print('output image saved at ', os.path.join(save_im_path, 'img_' + str(i) + '_deblur.png'))
+                    print('output image saved at ', os.path.join(save_im_path, 'img_' + str(i) + '_high_resolution.png'))
 
             if hparams.extract_curves:
                 # Save curves
