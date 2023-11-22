@@ -89,7 +89,7 @@ def inpaint():
 
         if hparams.extract_curves:
             # Create curves
-            PnP_module.update_curves(x_list, z_list, psnr_tab, ssim_tab, Dx_list, Ds_list, s_list, F_list)
+            PnP_module.update_curves(x_list, psnr_tab, ssim_tab, Dx_list, Ds_list, s_list, F_list)
 
         if hparams.extract_images:
             # Save images
