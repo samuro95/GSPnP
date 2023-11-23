@@ -9,7 +9,7 @@ from utils.utils_restoration import rgb2y, psnr, array2tensor, tensor2array
 from skimage.metrics import structural_similarity as ssim
 import sys
 from matplotlib.ticker import MaxNLocator
-
+from utils.utils_restoration import imsave, single2uint
 
 class PnP_restoration():
 
@@ -240,12 +240,15 @@ class PnP_restoration():
                 self.sigma_denoiser = self.hparams.sigma_denoiser
                 use_backtracking = self.hparams.use_backtracking
                 early_stopping = self.hparams.early_stopping
-
+            # imsave('SR/test_x_' + str(i) + '.png', single2uint(tensor2array(x.cpu())))
             x_old = x
             # Gradient of the regularization term
             _,g,Dg = self.denoise(x_old, self.sigma_denoiser)
+            x_denoised = x_old - Dg
+            # imsave('SR/test_outputdenoiser_' + str(i) + '.png', single2uint(tensor2array(x_denoised.cpu())))
             # Gradient step
             z = x_old - self.tau * self.hparams.lamb * Dg
+            # imsave('SR/test_z_' + str(i) + '.png', single2uint(tensor2array(z.cpu())))
             # Proximal step
             x = self.data_fidelity_prox_step(z, img_tensor, self.tau)
             y = z # output image is the output of the denoising step
@@ -427,13 +430,13 @@ class PnP_restoration():
         parser.add_argument('--noise_model', type=str,  default='gaussian')
         parser.add_argument('--dataset_name', type=str, default='set3c')
         parser.add_argument('--noise_level_img', type=float, default=5)
-        parser.add_argument('--maxitr', type=int, default=1000)
+        parser.add_argument('--maxitr', type=int)
         parser.add_argument('--stepsize', type=float)
         parser.add_argument('--lamb', type=float)
         parser.add_argument('--sigma_denoiser', type=float)
         parser.add_argument('--n_images', type=int, default=68)
         parser.add_argument('--crit_conv', type=str, default='cost')
-        parser.add_argument('--thres_conv', type=float, default=1e-7)
+        parser.add_argument('--thres_conv', type=float)
         parser.add_argument('--no_backtracking', dest='use_backtracking', action='store_false')
         parser.set_defaults(use_backtracking=True)
         parser.add_argument('--eta_backtracking', type=float, default=0.9)

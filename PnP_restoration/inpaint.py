@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from collections import OrderedDict
-from argparse import ArgumentParser
+import argparse
 from GS_PnP_restoration import PnP_restoration
 from utils.utils_restoration import single2uint,crop_center, matlab_style_gauss2D, imread_uint, imsave
 from natsort import os_sorted
@@ -9,21 +9,23 @@ from natsort import os_sorted
 
 def inpaint():
 
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument('--prop_mask', type=float, default=0.5)
     parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
+    parser_args = parser.parse_args()
+    hparams = argparse.Namespace(**vars(parser_args)) #copy of Namespace object
 
     # Inpainting specific hyperparameters
     hparams.degradation_mode = 'inpainting'
     hparams.sigma_denoiser = 10
     hparams.noise_level_img = 0
     hparams.n_init = 10
-    hparams.maxitr = 100
+    hparams.maxitr = 10
     hparams.use_backtracking = False
     hparams.inpainting_init = True
-    hparams.lamb = 0.1
+    hparams.lamb = 1
 
     # PnP_restoration class
     PnP_module = PnP_restoration(hparams)

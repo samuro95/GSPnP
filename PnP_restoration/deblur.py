@@ -2,7 +2,7 @@ import os
 import numpy as np
 import hdf5storage
 from scipy import ndimage
-from argparse import ArgumentParser
+import argparse
 from utils.utils_restoration import rescale, array2tensor, tensor2array, get_gaussian_noise_parameters, create_out_dir, single2uint,crop_center, matlab_style_gauss2D, imread_uint, imsave
 from natsort import os_sorted
 from GS_PnP_restoration import PnP_restoration
@@ -11,12 +11,14 @@ import cv2
 
 def deblur():
 
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument('--kernel_path', type=str)
     parser.add_argument('--kernel_indexes', nargs='+', type=int)
     parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
+    parser_args = parser.parse_args()
+    hparams = argparse.Namespace(**vars(parser_args)) #copy of Namespace object
 
     # Deblurring specific hyperparameters
 
@@ -74,7 +76,7 @@ def deblur():
             PnP_module.initialize_curves()
 
         PnP_module.hparams.lamb, PnP_module.hparams.sigma_denoiser, PnP_module.hparams.maxitr, PnP_module.hparams.thres_conv = get_gaussian_noise_parameters(
-                                hparams.noise_level_img, k_index=k_index, degradation_mode='deblur')
+                                hparams.noise_level_img, parser_args, k_index=k_index, degradation_mode='deblur')
 
         print('GS-DRUNET deblurring with image sigma:{:.3f}, model sigma:{:.3f}, lamb:{:.3f} \n'.format(hparams.noise_level_img, hparams.sigma_denoiser, hparams.lamb))
 

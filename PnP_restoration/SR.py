@@ -2,7 +2,7 @@ import os
 import numpy as np
 import hdf5storage
 from scipy import ndimage
-from argparse import ArgumentParser
+import argparse
 from utils.utils_restoration import modcrop, rescale, array2tensor, tensor2array, get_gaussian_noise_parameters, create_out_dir, single2uint,crop_center, matlab_style_gauss2D, imread_uint, imsave
 from natsort import os_sorted
 from GS_PnP_restoration import PnP_restoration
@@ -12,13 +12,14 @@ from utils.utils_sr import numpy_degradation, shift_pixel
 
 def SR():
 
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument('--sf', nargs='+', type=int)
     parser.add_argument('--kernel_path', type=str)
     parser.add_argument('--kernel_indexes', nargs='+', type=int)
     parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
-    hparams = parser.parse_args()
+    parser_args = parser.parse_args()
+    hparams = argparse.Namespace(**vars(parser_args)) #copy of Namespace object
 
     # SR specific hyperparameters
     hparams.degradation_mode = 'SR'
@@ -79,18 +80,23 @@ def SR():
                 PnP_module.initialize_curves()
 
             PnP_module.hparams.lamb, PnP_module.hparams.sigma_denoiser, PnP_module.hparams.maxitr, PnP_module.hparams.thres_conv = get_gaussian_noise_parameters(
-                                    hparams.noise_level_img, k_index=k_index, degradation_mode='SR')
+                                    hparams.noise_level_img, parser_args, k_index=k_index, degradation_mode='SR')
 
             print('GS-DRUNET super-resolution with image sigma:{:.3f}, model sigma:{:.3f}, lamb:{:.3f} \n'.format(hparams.noise_level_img, hparams.sigma_denoiser, hparams.lamb))
 
             if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
                 exp_out_path = create_out_dir(hparams.degradation_mode, hparams.dataset_name)
+                if len(k_index_list) > 1:
+                    exp_out_path = os.path.join(exp_out_path, "kernel_"+str(k_index))
+                    if not os.path.exists(exp_out_path):
+                        os.mkdir(exp_out_path)
 
             for i in range(min(len(input_paths),hparams.n_images)) : # For each image
 
                 print('SR of image {}, sf={}, kernel index {}'.format(i, sf, k_index))
                 
                 np.random.seed(seed=0)
+
                 # load image
                 input_im_uint = imread_uint(input_paths[i])
                 input_im = np.float32(input_im_uint / 255.)
