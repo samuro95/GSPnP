@@ -6,9 +6,10 @@ from utils import utils_sr
 import torch
 from argparse import ArgumentParser
 from utils.utils_restoration import rgb2y, psnr, array2tensor, tensor2array
+from skimage.metrics import structural_similarity as ssim
 import sys
 from matplotlib.ticker import MaxNLocator
-
+from utils.utils_restoration import imsave, single2uint
 
 class PnP_restoration():
 
@@ -189,9 +190,7 @@ class PnP_restoration():
         self.sf = sf
 
         if extract_results:
-            y_list, z_list, x_list, Dg_list, psnr_tab, g_list, f_list, Df_list, F_list, Psi_list = [], [], [], [], [], [], [], [], [], []
-
-        i = 0 # iteration counter
+            y_list, z_list, x_list, Dg_list, psnr_tab, ssim_tab, g_list, f_list, Df_list, F_list, Psi_list = [], [], [], [], [], [], [], [], [], [], []
 
         # initalize parameters
         if self.hparams.stepsize is not None:
@@ -241,13 +240,15 @@ class PnP_restoration():
                 self.sigma_denoiser = self.hparams.sigma_denoiser
                 use_backtracking = self.hparams.use_backtracking
                 early_stopping = self.hparams.early_stopping
-                
+            # imsave('SR/test_x_' + str(i) + '.png', single2uint(tensor2array(x.cpu())))
             x_old = x
-
             # Gradient of the regularization term
             _,g,Dg = self.denoise(x_old, self.sigma_denoiser)
+            x_denoised = x_old - Dg
+            # imsave('SR/test_outputdenoiser_' + str(i) + '.png', single2uint(tensor2array(x_denoised.cpu())))
             # Gradient step
             z = x_old - self.tau * self.hparams.lamb * Dg
+            # imsave('SR/test_z_' + str(i) + '.png', single2uint(tensor2array(z.cpu())))
             # Proximal step
             x = self.data_fidelity_prox_step(z, img_tensor, self.tau)
             y = z # output image is the output of the denoising step
@@ -283,7 +284,9 @@ class PnP_restoration():
                     z_list.append(out_z)
                     g_list.append(g.cpu().item())
                     Dg_list.append(torch.norm(Dg).cpu().item())
-                    psnr_tab.append(current_x_psnr)
+                    psnr_tab.append(current_z_psnr)
+                    current_z_ssim = ssim(clean_img, out_z, data_range = 1, channel_axis = 2)
+                    ssim_tab.append(current_z_ssim)
                     F_list.append(F)
                     f_list.append(f)
                 
@@ -307,11 +310,12 @@ class PnP_restoration():
 
         output_img = tensor2array(y.cpu())
         output_psnr = psnr(clean_img, output_img)
+        output_ssim = ssim(clean_img, output_img, data_range = 1, channel_axis = 2)
 
         if extract_results:
-            return output_img, tensor2array(x0.cpu()), output_psnr, i, x_list, z_list, np.array(Dg_list), np.array(psnr_tab), np.array(g_list), np.array(F_list), np.array(f_list)
+            return output_img, tensor2array(x0.cpu()), output_psnr, output_ssim, i, x_list, z_list, np.array(Dg_list), np.array(psnr_tab), np.array(ssim_tab), np.array(g_list), np.array(F_list), np.array(f_list)
         else:
-            return output_img, tensor2array(x0.cpu()), output_psnr, i
+            return output_img, tensor2array(x0.cpu()), output_psnr, output_ssim, i
 
 
 
@@ -320,6 +324,7 @@ class PnP_restoration():
         self.conv = []
         self.conv_F = []
         self.PSNR = []
+        self.SSIM = []
         self.g = []
         self.Dg = []
         self.F = []
@@ -328,13 +333,14 @@ class PnP_restoration():
         self.lip_D = []
         self.lip_Dg = []
 
-    def update_curves(self, x_list, psnr_tab, Dg_list, g_list, F_list, f_list):
+    def update_curves(self, x_list, psnr_tab, ssim_tab, Dg_list, g_list, F_list, f_list):
 
         self.F.append(F_list)
         self.f.append(f_list)
         self.g.append(g_list)
         self.Dg.append(Dg_list)
         self.PSNR.append(psnr_tab)
+        self.SSIM.append(ssim_tab)
         self.conv.append(np.array([(np.linalg.norm(x_list[k + 1] - x_list[k]) ** 2) for k in range(len(x_list) - 1)]) / np.sum(np.abs(x_list[0]) ** 2))
         self.lip_algo.append(np.sqrt(np.array([np.sum(np.abs(x_list[k + 1] - x_list[k]) ** 2) for k in range(1, len(x_list) - 1)]) / np.array([np.sum(np.abs(x_list[k] - x_list[k - 1]) ** 2) for k in range(1, len(x_list[:-1]))])))
 
@@ -370,12 +376,21 @@ class PnP_restoration():
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
+        for i in range(len(self.SSIM)):
+            plt.plot(self.SSIM[i], '-o')
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.savefig(os.path.join(save_path, 'SSIM.png'),bbox_inches="tight")
+
+        plt.figure(3)
+        fig, ax = plt.subplots()
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
         for i in range(len(self.F)):
             plt.plot(self.F[i], '-o')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         plt.savefig(os.path.join(save_path, 'F.png'), bbox_inches="tight")
 
-        plt.figure(3)
+        plt.figure(4)
         fig, ax = plt.subplots()
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
@@ -414,14 +429,14 @@ class PnP_restoration():
         parser.add_argument('--pretrained_checkpoint', type=str,default='../GS_denoising/ckpts/GSDRUNet.ckpt')
         parser.add_argument('--noise_model', type=str,  default='gaussian')
         parser.add_argument('--dataset_name', type=str, default='set3c')
-        parser.add_argument('--noise_level_img', type=float, required=True)
-        parser.add_argument('--maxitr', type=int, default=1000)
+        parser.add_argument('--noise_level_img', type=float, default=5)
+        parser.add_argument('--maxitr', type=int)
         parser.add_argument('--stepsize', type=float)
         parser.add_argument('--lamb', type=float)
         parser.add_argument('--sigma_denoiser', type=float)
         parser.add_argument('--n_images', type=int, default=68)
         parser.add_argument('--crit_conv', type=str, default='cost')
-        parser.add_argument('--thres_conv', type=float, default=1e-7)
+        parser.add_argument('--thres_conv', type=float)
         parser.add_argument('--no_backtracking', dest='use_backtracking', action='store_false')
         parser.set_defaults(use_backtracking=True)
         parser.add_argument('--eta_backtracking', type=float, default=0.9)

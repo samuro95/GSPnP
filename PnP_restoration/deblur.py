@@ -2,22 +2,23 @@ import os
 import numpy as np
 import hdf5storage
 from scipy import ndimage
-from argparse import ArgumentParser
+import argparse
 from utils.utils_restoration import rescale, array2tensor, tensor2array, get_gaussian_noise_parameters, create_out_dir, single2uint,crop_center, matlab_style_gauss2D, imread_uint, imsave
 from natsort import os_sorted
 from GS_PnP_restoration import PnP_restoration
 import wandb
 import cv2
 
-
 def deblur():
 
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument('--kernel_path', type=str)
     parser.add_argument('--kernel_indexes', nargs='+', type=int)
     parser.add_argument('--image_path', type=str)
     parser = PnP_restoration.add_specific_args(parser)
     hparams = parser.parse_args()
+    parser_args = parser.parse_args()
+    hparams = argparse.Namespace(**vars(parser_args)) #copy of Namespace object
 
     # Deblurring specific hyperparameters
 
@@ -75,12 +76,16 @@ def deblur():
             PnP_module.initialize_curves()
 
         PnP_module.hparams.lamb, PnP_module.hparams.sigma_denoiser, PnP_module.hparams.maxitr, PnP_module.hparams.thres_conv = get_gaussian_noise_parameters(
-                                hparams.noise_level_img, k_index=k_index, degradation_mode='deblur')
+                                hparams.noise_level_img, parser_args, k_index=k_index, degradation_mode='deblur')
 
         print('GS-DRUNET deblurring with image sigma:{:.3f}, model sigma:{:.3f}, lamb:{:.3f} \n'.format(hparams.noise_level_img, hparams.sigma_denoiser, hparams.lamb))
 
         if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
             exp_out_path = create_out_dir(hparams.degradation_mode, hparams.dataset_name)
+            if len(k_index_list) > 1:
+                exp_out_path = os.path.join(exp_out_path, "kernel_"+str(k_index))
+                if not os.path.exists(exp_out_path):
+                    os.mkdir(exp_out_path)
 
         for i in range(min(len(input_paths),hparams.n_images)): # For each image
 
@@ -103,11 +108,12 @@ def deblur():
 
             # PnP restoration
             if hparams.extract_images or hparams.extract_curves or hparams.print_each_step:
-                deblur_im, init_im, output_psnr, n_it, x_list, z_list, Dg_list, psnr_tab, g_list, F_list, f_list = PnP_module.restore(blur_im.copy(),init_im.copy(),input_im.copy(),k, extract_results=True)
+                deblur_im, init_im, output_psnr, output_ssim, n_it, x_list, z_list, Dg_list, psnr_tab, ssim_tab, g_list, F_list, f_list = PnP_module.restore(blur_im.copy(),init_im.copy(),input_im.copy(),k, extract_results=True)
             else :
-                deblur_im, init_im, output_psnr, n_it = PnP_module.restore(blur_im,init_im,input_im,k)
+                deblur_im, init_im, output_psnr, output_ssim, n_it = PnP_module.restore(blur_im,init_im,input_im,k)
 
             print('PSNR: {:.2f}dB'.format(output_psnr))
+            print('SSIM: {:.2f}'.format(output_ssim))
             print(f'N iterations: {n_it}')
             
             psnr_k_list.append(output_psnr)
@@ -116,7 +122,7 @@ def deblur():
 
             if hparams.extract_curves:
                 # Create curves
-                PnP_module.update_curves(x_list, psnr_tab, Dg_list, g_list, F_list, f_list)
+                PnP_module.update_curves(x_list, psnr_tab, ssim_tab, Dg_list, g_list, F_list, f_list)
 
             if hparams.extract_images:
                 # Save images
@@ -124,7 +130,7 @@ def deblur():
                 if not os.path.exists(save_im_path):
                     os.mkdir(save_im_path)
                 imsave(os.path.join(save_im_path, 'img_'+str(i)+'_input.png'), input_im_uint)
-                imsave(os.path.join(save_im_path, 'img_' + str(i) + '_deblur.png'), single2uint(rescale(deblur_im)))
+                imsave(os.path.join(save_im_path, 'img_' + str(i) + "_deblur.png"), single2uint(rescale(deblur_im)))
                 imsave(os.path.join(save_im_path, 'img_'+str(i)+'_blur.png'), single2uint(rescale(blur_im)))
                 imsave(os.path.join(save_im_path, 'img_' + str(i) + '_init.png'), single2uint(rescale(init_im)))
                 print('output image saved at ', os.path.join(save_im_path, 'img_' + str(i) + '_deblur.png'))
