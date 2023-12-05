@@ -18,3 +18,5 @@ PnP_restoration/SR/
 PnP_restoration/denoise/
 datasets/DRUNET/
 *.zip
+*.yaml
+*sirocco14*

@@ -12,7 +12,7 @@ import torchvision
 import numpy as np
 from test_utils import test_mode
 import matplotlib.pyplot as plt
-from GS_utils import normalize_min_max
+from GS_utils import psnr, normalize_min_max
 from models.network_unet import UNetRes
 
 
